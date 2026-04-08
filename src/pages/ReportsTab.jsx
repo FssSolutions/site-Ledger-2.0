@@ -36,8 +36,7 @@ export default function ReportsTab({ jobs, employees, sessions, mileage }) {
       const emp = employees.find(x => x.id === s.employee_id);
       const hrs = (calcDur(s) / 3600000).toFixed(2);
       const d = new Date(s.start_time);
-      const dateStr = `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear()}`;
-      lines.push(`TIMEACT\t${dateStr}\t${j?.name || ''}\t${emp?.name || 'Owner'}\tServices\t${hrs}\t\t1`);
+      lines.push(`TIMEACT\t${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear()}\t${j?.name || ''}\t${emp?.name || 'Owner'}\tServices\t${hrs}\t\t1`);
     });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([lines.join('\n')], { type: 'text/plain' }));
@@ -63,7 +62,7 @@ export default function ReportsTab({ jobs, employees, sessions, mileage }) {
       <div style={{ display: 'flex', gap: 6, padding: '16px 16px 0', overflowX: 'auto' }}>
         {[{ id: 'week', l: '7 Days' }, { id: 'month', l: 'This Month' }, { id: 'lastmonth', l: 'Last Month' }, { id: 'year', l: 'This Year' }, { id: 'custom', l: 'Custom' }].map(p => (
           <button key={p.id} onClick={() => setPre(p.id)}
-            style={{ padding: '8px 14px', borderRadius: 20, border: pre === p.id ? 'none' : '1px solid #2a2a2a', background: pre === p.id ? '#E8651A' : 'transparent', color: pre === p.id ? '#fff' : '#666', fontSize: 13, fontWeight: pre === p.id ? 700 : 400, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>
+            style={{ padding: '8px 14px', borderRadius: 20, border: pre === p.id ? 'none' : '1px solid #e0e0e0', background: pre === p.id ? '#E8651A' : '#fff', color: pre === p.id ? '#fff' : '#888', fontSize: 13, fontWeight: pre === p.id ? 700 : 400, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>
             {p.l}
           </button>
         ))}
@@ -77,15 +76,15 @@ export default function ReportsTab({ jobs, employees, sessions, mileage }) {
       )}
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, padding: '12px 16px 0' }}>
-        <div style={{ ...card, padding: '16px 18px' }}><div style={{ color: '#555', fontSize: 11, fontFamily: "'DM Mono', monospace", letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 6 }}>Earned</div><div style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Syne', sans-serif", color: '#E8651A' }}>{fmtCAD(te)}</div></div>
-        <div style={{ ...card, padding: '16px 18px' }}><div style={{ color: '#555', fontSize: 11, fontFamily: "'DM Mono', monospace", letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 6 }}>Hours</div><div style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Syne', sans-serif", color: '#fff' }}>{fmtDur(tm)}</div></div>
-        <div style={{ ...card, padding: '16px 18px' }}><div style={{ color: '#555', fontSize: 11, fontFamily: "'DM Mono', monospace", letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 6 }}>Mileage</div><div style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Syne', sans-serif", color: '#fff' }}>{totalKm.toFixed(0)} km</div></div>
-        <div style={{ ...card, padding: '16px 18px' }}><div style={{ color: '#555', fontSize: 11, fontFamily: "'DM Mono', monospace", letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 6 }}>KM Deduction</div><div style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Syne', sans-serif", color: '#3BB273' }}>{fmtCAD(totalKm * CRA_RATE)}</div></div>
+        <div style={{ ...card, padding: '16px 18px' }}><div style={{ color: '#999', fontSize: 11, fontFamily: "'DM Mono', monospace", letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 6 }}>Earned</div><div style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Syne', sans-serif", color: '#E8651A' }}>{fmtCAD(te)}</div></div>
+        <div style={{ ...card, padding: '16px 18px' }}><div style={{ color: '#999', fontSize: 11, fontFamily: "'DM Mono', monospace", letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 6 }}>Hours</div><div style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Syne', sans-serif", color: '#111' }}>{fmtDur(tm)}</div></div>
+        <div style={{ ...card, padding: '16px 18px' }}><div style={{ color: '#999', fontSize: 11, fontFamily: "'DM Mono', monospace", letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 6 }}>Mileage</div><div style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Syne', sans-serif", color: '#111' }}>{totalKm.toFixed(0)} km</div></div>
+        <div style={{ ...card, padding: '16px 18px' }}><div style={{ color: '#999', fontSize: 11, fontFamily: "'DM Mono', monospace", letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 6 }}>KM Deduction</div><div style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Syne', sans-serif", color: '#3BB273' }}>{fmtCAD(totalKm * CRA_RATE)}</div></div>
       </div>
 
       {bj.length > 0 && (
         <div style={{ ...card, margin: '16px 16px 0', padding: '20px 24px' }}>
-          <div style={{ color: '#555', fontSize: 11, fontFamily: "'DM Mono', monospace", letterSpacing: 2, textTransform: 'uppercase', marginBottom: 14 }}>By Job</div>
+          <div style={{ color: '#999', fontSize: 11, fontFamily: "'DM Mono', monospace", letterSpacing: 2, textTransform: 'uppercase', marginBottom: 14 }}>By Job</div>
           {bj.map(j => {
             const pct = te ? (j.e / te) * 100 : 0;
             return (
@@ -93,14 +92,14 @@ export default function ReportsTab({ jobs, employees, sessions, mileage }) {
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <div style={{ width: 8, height: 8, borderRadius: '50%', background: j.color }} />
-                    <span style={{ color: '#ccc', fontSize: 13 }}>{j.name}</span>
+                    <span style={{ color: '#333', fontSize: 13 }}>{j.name}</span>
                   </div>
                   <div>
-                    <span style={{ color: '#e0e0e0', fontSize: 13, fontWeight: 600 }}>{fmtCAD(j.e)}</span>
-                    <span style={{ color: '#444', fontSize: 12, marginLeft: 8 }}>{fmtDur(j.h)}</span>
+                    <span style={{ color: '#111', fontSize: 13, fontWeight: 600 }}>{fmtCAD(j.e)}</span>
+                    <span style={{ color: '#bbb', fontSize: 12, marginLeft: 8 }}>{fmtDur(j.h)}</span>
                   </div>
                 </div>
-                <div style={{ height: 4, background: '#222', borderRadius: 2, overflow: 'hidden' }}>
+                <div style={{ height: 4, background: '#f0f0f0', borderRadius: 2, overflow: 'hidden' }}>
                   <div style={{ height: '100%', width: `${pct}%`, background: j.color, borderRadius: 2 }} />
                 </div>
               </div>
@@ -111,30 +110,30 @@ export default function ReportsTab({ jobs, employees, sessions, mileage }) {
 
       {be.length > 0 && (
         <div style={{ ...card, margin: '12px 16px 0', padding: '20px 24px' }}>
-          <div style={{ color: '#555', fontSize: 11, fontFamily: "'DM Mono', monospace", letterSpacing: 2, textTransform: 'uppercase', marginBottom: 14 }}>Crew Hours</div>
+          <div style={{ color: '#999', fontSize: 11, fontFamily: "'DM Mono', monospace", letterSpacing: 2, textTransform: 'uppercase', marginBottom: 14 }}>Crew Hours</div>
           {be.map(e => (
-            <div key={e.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid #222' }}>
+            <div key={e.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid #f0f0f0' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#2a2a2a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Icon name="user" size={14} /></div>
+                <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Icon name="user" size={14} /></div>
                 <div>
-                  <div style={{ color: '#ccc', fontSize: 13, fontWeight: 600 }}>{e.name}</div>
-                  <div style={{ color: '#555', fontSize: 12 }}>{e.hrs.toFixed(1)} hrs</div>
+                  <div style={{ color: '#333', fontSize: 13, fontWeight: 600 }}>{e.name}</div>
+                  <div style={{ color: '#aaa', fontSize: 12 }}>{e.hrs.toFixed(1)} hrs</div>
                 </div>
               </div>
               <div style={{ textAlign: 'right' }}>
-                <div style={{ color: '#e0e0e0', fontSize: 13, fontWeight: 600 }}>{fmtCAD(e.cost)}</div>
-                <div style={{ color: '#444', fontSize: 11 }}>{fmtCAD(e.rate)}/hr</div>
+                <div style={{ color: '#111', fontSize: 13, fontWeight: 600 }}>{fmtCAD(e.cost)}</div>
+                <div style={{ color: '#bbb', fontSize: 11 }}>{fmtCAD(e.rate)}/hr</div>
               </div>
             </div>
           ))}
         </div>
       )}
 
-      {f.length === 0 && <div style={{ textAlign: 'center', padding: '40px 0', color: '#444' }}>No sessions in this period</div>}
+      {f.length === 0 && <div style={{ textAlign: 'center', padding: '40px 0', color: '#bbb' }}>No sessions in this period</div>}
 
       {f.length > 0 && (
         <div style={{ padding: '16px 16px 0', display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <button onClick={exportCSV} style={{ width: '100%', padding: '12px', borderRadius: 12, border: '1px solid #2a2a2a', background: 'transparent', color: '#666', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+          <button onClick={exportCSV} style={{ width: '100%', padding: '12px', borderRadius: 12, border: '1px solid #e0e0e0', background: '#fff', color: '#888', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
             <Icon name="dl" size={14} /> Export CSV
           </button>
           <button onClick={exportIIF} style={{ width: '100%', padding: '12px', borderRadius: 12, border: '1px solid #2E86AB44', background: '#2E86AB11', color: '#2E86AB', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
