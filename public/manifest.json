@@ -1,0 +1,18 @@
+{
+  "name": "SiteLedger",
+  "short_name": "SiteLedger",
+  "description": "Time tracking for carpenters and contractors",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f4f4f4",
+  "theme_color": "#E8651A",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
