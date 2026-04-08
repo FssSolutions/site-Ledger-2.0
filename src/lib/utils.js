@@ -27,5 +27,39 @@ export function dayKey(ts) {
 }
 
 export function todayStr() {
-  return new Date().toISOString().slice(0, 10);
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+// ISO week number for a date
+export function getISOWeek(d) {
+  const date = new Date(d);
+  date.setHours(0, 0, 0, 0);
+  date.setDate(date.getDate() + 3 - ((date.getDay() + 6) % 7));
+  const week1 = new Date(date.getFullYear(), 0, 4);
+  return `${date.getFullYear()}-W${String(1 + Math.round(((date - week1) / 86400000 - 3 + ((week1.getDay() + 6) % 7)) / 7)).padStart(2, '0')}`;
+}
+
+// Returns { daily: { 'YYYY-MM-DD': { total (hrs), overtime (hrs) } }, weekly: { 'YYYY-WNN': { total, overtime } } }
+export function calcOvertime(sessions, dailyLimit = 8, weeklyLimit = 44) {
+  const daily = {};
+  const weekly = {};
+
+  sessions.forEach(s => {
+    if (!s.end_time) return;
+    const hrs = calcDur(s) / 3600000;
+    const dk = dayKey(s.start_time);
+    const wk = getISOWeek(new Date(s.start_time));
+
+    if (!daily[dk]) daily[dk] = { total: 0, overtime: 0 };
+    daily[dk].total += hrs;
+
+    if (!weekly[wk]) weekly[wk] = { total: 0, overtime: 0 };
+    weekly[wk].total += hrs;
+  });
+
+  Object.values(daily).forEach(d => { d.overtime = Math.max(0, d.total - dailyLimit); });
+  Object.values(weekly).forEach(w => { w.overtime = Math.max(0, w.total - weeklyLimit); });
+
+  return { daily, weekly };
 }

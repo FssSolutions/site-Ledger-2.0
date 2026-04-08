@@ -18,6 +18,8 @@ export default function ClockTab({ jobs, employees, sessions, active, onIn, onOu
   const today = sessions.filter(s => new Date(s.start_time).toDateString() === new Date().toDateString());
   const todayEarn = today.reduce((s, x) => s + calcEarnings(x, jobs), 0);
   const todayMs = today.reduce((s, x) => s + calcDur(x), 0);
+  const todayHrs = (todayMs + elapsed) / 3600000;
+  const dailyOT = Math.max(0, todayHrs - 8);
 
   return (
     <div style={{ padding: '0 0 100px' }}>
@@ -28,7 +30,14 @@ export default function ClockTab({ jobs, employees, sessions, active, onIn, onOu
       )}
 
       <div style={{ ...card, padding: '20px 24px', margin: '16px 16px 0' }}>
-        <div style={{ color: '#999', fontSize: 11, fontFamily: "'DM Mono', monospace", letterSpacing: 2, textTransform: 'uppercase', marginBottom: 12 }}>Today</div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <div style={{ color: '#999', fontSize: 11, fontFamily: "'DM Mono', monospace", letterSpacing: 2, textTransform: 'uppercase' }}>Today</div>
+          {dailyOT > 0 && (
+            <div style={{ background: dailyOT > 4 ? '#FADBD8' : '#FDEBD0', color: dailyOT > 4 ? '#C0392B' : '#E67E22', fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 6, fontFamily: "'DM Mono', monospace" }}>
+              {dailyOT.toFixed(1)}h OT
+            </div>
+          )}
+        </div>
         <div style={{ display: 'flex', gap: 32 }}>
           <div>
             <div style={{ fontSize: 28, fontWeight: 700, fontFamily: "'Syne', sans-serif", color: '#111', lineHeight: 1 }}>{fmtCAD(todayEarn)}</div>
