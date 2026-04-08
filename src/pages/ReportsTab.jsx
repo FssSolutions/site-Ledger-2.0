@@ -1,0 +1,147 @@
+import { useState } from 'react';
+import Icon from '../components/Icon.jsx';
+import { card, inp } from '../styles.js';
+import { CRA_RATE } from '../lib/constants.js';
+import { fmtDur, fmtCAD, calcEarnings, calcDur } from '../lib/utils.js';
+
+export default function ReportsTab({ jobs, employees, sessions, mileage }) {
+  const [pre, setPre] = useState('month');
+  const [cs, setCs] = useState('');
+  const [ce, setCe] = useState('');
+  const now = new Date();
+
+  function range() {
+    if (pre === 'week') { const s = new Date(now); s.setDate(now.getDate() - 6); s.setHours(0, 0, 0, 0); const e = new Date(now); e.setHours(23, 59, 59, 999); return [s, e]; }
+    if (pre === 'month') return [new Date(now.getFullYear(), now.getMonth(), 1), new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999)];
+    if (pre === 'lastmonth') { const s = new Date(now.getFullYear(), now.getMonth() - 1, 1), e = new Date(now.getFullYear(), now.getMonth(), 0); e.setHours(23, 59, 59, 999); return [s, e]; }
+    if (pre === 'year') return [new Date(now.getFullYear(), 0, 1), now];
+    if (pre === 'custom' && cs && ce) { const e = new Date(ce); e.setHours(23, 59, 59, 999); return [new Date(cs), e]; }
+    return [new Date(0), new Date(8640000000000000)];
+  }
+
+  const [rs, re] = range();
+  const f = sessions.filter(s => { const t = new Date(s.start_time); return t >= rs && t <= re && s.end_time; });
+  const fm = mileage.filter(m => { const t = new Date(m.date); return t >= rs && t <= re; });
+  const te = f.reduce((s, x) => s + calcEarnings(x, jobs), 0);
+  const tm = f.reduce((s, x) => s + calcDur(x), 0);
+  const totalKm = fm.reduce((s, x) => s + Number(x.km), 0);
+  const bj = jobs.map(j => { const js = f.filter(s => s.job_id === j.id); return { ...j, e: js.reduce((s, x) => s + calcEarnings(x, jobs), 0), h: js.reduce((s, x) => s + calcDur(x), 0), n: js.length }; }).filter(j => j.n > 0).sort((a, b) => b.e - a.e);
+  const be = employees.map(e => { const es = f.filter(s => s.employee_id === e.id); const hrs = es.reduce((s, x) => s + calcDur(x), 0) / 3600000; return { ...e, hrs, cost: hrs * e.rate, n: es.length }; }).filter(e => e.n > 0).sort((a, b) => b.hrs - a.hrs);
+
+  function exportIIF() {
+    const lines = ['!TIMERJOB\tJOBNAME\tTIMEBILLED\tJOBDESC'];
+    lines.push('!TIMEACT\tDATE\tJOBNAME\tEMP\tSERVICEITEM\tDURATION\tDESC\tBILLINGSTATUS');
+    f.forEach(s => {
+      const j = jobs.find(x => x.id === s.job_id);
+      const emp = employees.find(x => x.id === s.employee_id);
+      const hrs = (calcDur(s) / 3600000).toFixed(2);
+      const d = new Date(s.start_time);
+      const dateStr = `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear()}`;
+      lines.push(`TIMEACT\t${dateStr}\t${j?.name || ''}\t${emp?.name || 'Owner'}\tServices\t${hrs}\t\t1`);
+    });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([lines.join('\n')], { type: 'text/plain' }));
+    a.download = 'site-ledger-quickbooks.iif';
+    a.click();
+  }
+
+  function exportCSV() {
+    const rows = [['Date', 'Job', 'Employee', 'Start', 'End', 'Hours', 'Earnings (CAD)']];
+    f.forEach(s => {
+      const j = jobs.find(x => x.id === s.job_id);
+      const emp = employees.find(x => x.id === s.employee_id);
+      rows.push([new Date(s.start_time).toLocaleDateString('en-CA'), j?.name || '', emp?.name || 'Owner', new Date(s.start_time).toLocaleTimeString('en-CA'), new Date(s.end_time).toLocaleTimeString('en-CA'), (calcDur(s) / 3600000).toFixed(2), calcEarnings(s, jobs).toFixed(2)]);
+    });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([rows.map(r => r.join(',')).join('\n')], { type: 'text/csv' }));
+    a.download = 'site-ledger-report.csv';
+    a.click();
+  }
+
+  return (
+    <div style={{ padding: '0 0 100px' }}>
+      <div style={{ display: 'flex', gap: 6, padding: '16px 16px 0', overflowX: 'auto' }}>
+        {[{ id: 'week', l: '7 Days' }, { id: 'month', l: 'This Month' }, { id: 'lastmonth', l: 'Last Month' }, { id: 'year', l: 'This Year' }, { id: 'custom', l: 'Custom' }].map(p => (
+          <button key={p.id} onClick={() => setPre(p.id)}
+            style={{ padding: '8px 14px', borderRadius: 20, border: pre === p.id ? 'none' : '1px solid #2a2a2a', background: pre === p.id ? '#E8651A' : 'transparent', color: pre === p.id ? '#fff' : '#666', fontSize: 13, fontWeight: pre === p.id ? 700 : 400, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>
+            {p.l}
+          </button>
+        ))}
+      </div>
+
+      {pre === 'custom' && (
+        <div style={{ display: 'flex', gap: 8, padding: '12px 16px 0' }}>
+          <input type="date" value={cs} onChange={e => setCs(e.target.value)} style={{ ...inp, flex: 1 }} />
+          <input type="date" value={ce} onChange={e => setCe(e.target.value)} style={{ ...inp, flex: 1 }} />
+        </div>
+      )}
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, padding: '12px 16px 0' }}>
+        <div style={{ ...card, padding: '16px 18px' }}><div style={{ color: '#555', fontSize: 11, fontFamily: "'DM Mono', monospace", letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 6 }}>Earned</div><div style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Syne', sans-serif", color: '#E8651A' }}>{fmtCAD(te)}</div></div>
+        <div style={{ ...card, padding: '16px 18px' }}><div style={{ color: '#555', fontSize: 11, fontFamily: "'DM Mono', monospace", letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 6 }}>Hours</div><div style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Syne', sans-serif", color: '#fff' }}>{fmtDur(tm)}</div></div>
+        <div style={{ ...card, padding: '16px 18px' }}><div style={{ color: '#555', fontSize: 11, fontFamily: "'DM Mono', monospace", letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 6 }}>Mileage</div><div style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Syne', sans-serif", color: '#fff' }}>{totalKm.toFixed(0)} km</div></div>
+        <div style={{ ...card, padding: '16px 18px' }}><div style={{ color: '#555', fontSize: 11, fontFamily: "'DM Mono', monospace", letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 6 }}>KM Deduction</div><div style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Syne', sans-serif", color: '#3BB273' }}>{fmtCAD(totalKm * CRA_RATE)}</div></div>
+      </div>
+
+      {bj.length > 0 && (
+        <div style={{ ...card, margin: '16px 16px 0', padding: '20px 24px' }}>
+          <div style={{ color: '#555', fontSize: 11, fontFamily: "'DM Mono', monospace", letterSpacing: 2, textTransform: 'uppercase', marginBottom: 14 }}>By Job</div>
+          {bj.map(j => {
+            const pct = te ? (j.e / te) * 100 : 0;
+            return (
+              <div key={j.id} style={{ marginBottom: 16 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: j.color }} />
+                    <span style={{ color: '#ccc', fontSize: 13 }}>{j.name}</span>
+                  </div>
+                  <div>
+                    <span style={{ color: '#e0e0e0', fontSize: 13, fontWeight: 600 }}>{fmtCAD(j.e)}</span>
+                    <span style={{ color: '#444', fontSize: 12, marginLeft: 8 }}>{fmtDur(j.h)}</span>
+                  </div>
+                </div>
+                <div style={{ height: 4, background: '#222', borderRadius: 2, overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${pct}%`, background: j.color, borderRadius: 2 }} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {be.length > 0 && (
+        <div style={{ ...card, margin: '12px 16px 0', padding: '20px 24px' }}>
+          <div style={{ color: '#555', fontSize: 11, fontFamily: "'DM Mono', monospace", letterSpacing: 2, textTransform: 'uppercase', marginBottom: 14 }}>Crew Hours</div>
+          {be.map(e => (
+            <div key={e.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid #222' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#2a2a2a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Icon name="user" size={14} /></div>
+                <div>
+                  <div style={{ color: '#ccc', fontSize: 13, fontWeight: 600 }}>{e.name}</div>
+                  <div style={{ color: '#555', fontSize: 12 }}>{e.hrs.toFixed(1)} hrs</div>
+                </div>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ color: '#e0e0e0', fontSize: 13, fontWeight: 600 }}>{fmtCAD(e.cost)}</div>
+                <div style={{ color: '#444', fontSize: 11 }}>{fmtCAD(e.rate)}/hr</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {f.length === 0 && <div style={{ textAlign: 'center', padding: '40px 0', color: '#444' }}>No sessions in this period</div>}
+
+      {f.length > 0 && (
+        <div style={{ padding: '16px 16px 0', display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <button onClick={exportCSV} style={{ width: '100%', padding: '12px', borderRadius: 12, border: '1px solid #2a2a2a', background: 'transparent', color: '#666', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+            <Icon name="dl" size={14} /> Export CSV
+          </button>
+          <button onClick={exportIIF} style={{ width: '100%', padding: '12px', borderRadius: 12, border: '1px solid #2E86AB44', background: '#2E86AB11', color: '#2E86AB', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+            <Icon name="qb" size={14} /> Export for QuickBooks (.IIF)
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
