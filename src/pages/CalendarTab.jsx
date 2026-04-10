@@ -3,7 +3,7 @@ import SessionModal from '../components/SessionModal.jsx';
 import Icon from '../components/Icon.jsx';
 import { card, ib } from '../styles.js';
 import { MN } from '../lib/constants.js';
-import { fmtDur, fmtCAD, calcEarnings, calcDur, dayKey } from '../lib/utils.js';
+import { fmtDur, fmtCAD, calcEarnings, calcDur, dayKey, calcOvertime } from '../lib/utils.js';
 
 export default function CalendarTab({ jobs, employees, sessions, onSave, onDelete, busy }) {
   const [vd, setVd] = useState(new Date());
@@ -23,9 +23,12 @@ export default function CalendarTab({ jobs, employees, sessions, onSave, onDelet
 
   function dk(d) { return `${yr}-${String(mo + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`; }
 
+  const ot = useMemo(() => calcOvertime(sessions), [sessions]);
+
   const ss = sel ? (byDay[dk(sel)] || []) : [];
   const selEarn = ss.reduce((s, x) => s + calcEarnings(x, jobs), 0);
   const selMs = ss.reduce((s, x) => s + calcDur(x), 0);
+  const selOT = sel ? ot.daily[dk(sel)] : null;
   const modalDate = sel ? new Date(yr, mo, sel) : new Date();
 
   return (
@@ -58,13 +61,16 @@ export default function CalendarTab({ jobs, employees, sessions, onSave, onDelet
           const isTd = new Date().getDate() === d && new Date().getMonth() === mo && new Date().getFullYear() === yr;
           const isSel = sel === d;
           const cols = [...new Set(ds.map(s => jobs.find(j => j.id === s.job_id)?.color).filter(Boolean))];
+          const dayOT = ot.daily[k];
+          const hasOT = dayOT && dayOT.overtime > 0;
           return (
             <button key={d} onClick={() => setSel(isSel ? null : d)}
-              style={{ aspectRatio: '1', borderRadius: 10, border: isSel ? '1.5px solid #E8651A' : isTd ? '1.5px solid #ccc' : '1.5px solid transparent', background: isSel ? '#E8651A22' : isTd ? '#f0f0f0' : 'transparent', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2, padding: 4 }}>
-              <span style={{ color: isTd ? '#E8651A' : ds.length ? '#111' : '#bbb', fontSize: 13, fontWeight: isTd ? 700 : 400 }}>{d}</span>
+              style={{ aspectRatio: '1', borderRadius: 10, border: isSel ? '1.5px solid #E8651A' : hasOT ? '1.5px solid #E67E22' : isTd ? '1.5px solid #ccc' : '1.5px solid transparent', background: isSel ? '#E8651A22' : hasOT ? '#FEF5E7' : isTd ? '#f0f0f0' : 'transparent', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2, padding: 4 }}>
+              <span style={{ color: hasOT ? '#E67E22' : isTd ? '#E8651A' : ds.length ? '#111' : '#bbb', fontSize: 13, fontWeight: isTd || hasOT ? 700 : 400 }}>{d}</span>
               {cols.length > 0 && (
                 <div style={{ display: 'flex', gap: 2 }}>
                   {cols.slice(0, 3).map((c, ci) => <div key={ci} style={{ width: 5, height: 5, borderRadius: '50%', background: c }} />)}
+                  {hasOT && <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#E67E22' }} />}
                 </div>
               )}
             </button>
@@ -77,7 +83,16 @@ export default function CalendarTab({ jobs, employees, sessions, onSave, onDelet
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 14 }}>
             <div>
               <div style={{ color: '#111', fontSize: 16, fontWeight: 700, fontFamily: "'Syne', sans-serif" }}>{MN[mo]} {sel}</div>
-              {ss.length > 0 && <div style={{ color: '#999', fontSize: 12, marginTop: 2 }}>{fmtDur(selMs)} · {fmtCAD(selEarn)}</div>}
+              {ss.length > 0 && (
+                <div style={{ color: '#999', fontSize: 12, marginTop: 2, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  {fmtDur(selMs)} · {fmtCAD(selEarn)}
+                  {selOT && selOT.overtime > 0 && (
+                    <span style={{ background: selOT.overtime > 4 ? '#FADBD8' : '#FDEBD0', color: selOT.overtime > 4 ? '#C0392B' : '#E67E22', fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 4, fontFamily: "'DM Mono', monospace" }}>
+                      {selOT.overtime.toFixed(1)}h OT
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
             <button onClick={() => setModal('add')} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 10, border: 'none', background: '#E8651A', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
               <Icon name="plus" size={14} /> Add
