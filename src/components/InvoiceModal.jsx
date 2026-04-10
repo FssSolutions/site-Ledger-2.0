@@ -3,8 +3,8 @@ import { Modal, ModalHeader } from './Modal.jsx';
 import { inp, lbl, card } from '../styles.js';
 import generateInvoice from '../lib/generateInvoice.js';
 
-export default function InvoiceModal({ sessions, jobs, employees, dateRange, company, onClose }) {
-  const [clientName, setClientName] = useState('');
+export default function InvoiceModal({ sessions, jobs, employees, customers, dateRange, company, onClose }) {
+  const [selectedCustId, setSelectedCustId] = useState('');
   const [invoiceNum, setInvoiceNum] = useState('INV-001');
   const [selectedJobIds, setSelectedJobIds] = useState([]);
   const [done, setDone] = useState(false);
@@ -19,6 +19,8 @@ export default function InvoiceModal({ sessions, jobs, employees, dateRange, com
   const activeJobIds = [...new Set(activeSessions.map(s => s.job_id))];
   const activeJobs = jobs.filter(j => activeJobIds.includes(j.id));
 
+  const selectedCustomer = customers.find(c => c.id === selectedCustId) || null;
+
   function toggleJob(id) {
     setSelectedJobIds(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]);
   }
@@ -30,7 +32,7 @@ export default function InvoiceModal({ sessions, jobs, employees, dateRange, com
       employees,
       dateRange,
       company: company || {},
-      clientName,
+      customer: selectedCustomer,
       invoiceNum,
       selectedJobIds: selectedJobIds.length > 0 ? selectedJobIds : null,
     });
@@ -43,8 +45,28 @@ export default function InvoiceModal({ sessions, jobs, employees, dateRange, com
       <ModalHeader title="Generate Invoice" subtitle="PDF will download to your device" onClose={onClose} />
 
       <div style={{ marginBottom: 16 }}>
-        <label style={lbl}>Bill To (Client)</label>
-        <input style={inp} value={clientName} onChange={e => setClientName(e.target.value)} placeholder="e.g. John Doe" />
+        <label style={lbl}>Bill To (Customer)</label>
+        <select
+          style={{ ...inp, appearance: 'auto' }}
+          value={selectedCustId}
+          onChange={e => setSelectedCustId(e.target.value)}
+        >
+          <option value="">— Select a customer —</option>
+          {customers.map(c => (
+            <option key={c.id} value={c.id}>{c.name}</option>
+          ))}
+        </select>
+        {selectedCustomer && (
+          <div style={{ marginTop: 8, padding: '10px 14px', background: '#f9f9f9', borderRadius: 10, border: '1px solid #e8e8e8', fontSize: 12, color: '#666', lineHeight: 1.6 }}>
+            <div style={{ fontWeight: 600, color: '#333' }}>{selectedCustomer.name}</div>
+            {selectedCustomer.address && <div>{selectedCustomer.address}</div>}
+            {selectedCustomer.phone && <div>{selectedCustomer.phone}</div>}
+            {selectedCustomer.email && <div>{selectedCustomer.email}</div>}
+          </div>
+        )}
+        {customers.length === 0 && (
+          <div style={{ color: '#aaa', fontSize: 11, marginTop: 6 }}>No customers yet — add them in the Company tab.</div>
+        )}
       </div>
 
       <div style={{ marginBottom: 16 }}>
@@ -76,7 +98,7 @@ export default function InvoiceModal({ sessions, jobs, employees, dateRange, com
 
       {!company?.name && (
         <div style={{ background: '#FEF5E7', border: '1px solid #FDEBD0', borderRadius: 10, padding: '12px 14px', marginBottom: 16, fontSize: 12, color: '#E67E22' }}>
-          Set up your company info in the Jobs tab → Company section to have it appear on invoices.
+          Set up your company info in the Company tab → Profile section to have it appear on invoices.
         </div>
       )}
 

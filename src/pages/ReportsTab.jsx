@@ -5,7 +5,7 @@ import { card, inp } from '../styles.js';
 import { CRA_RATE } from '../lib/constants.js';
 import { fmtDur, fmtCAD, calcEarnings, calcDur, calcOvertime } from '../lib/utils.js';
 
-export default function ReportsTab({ jobs, employees, sessions, mileage, company }) {
+export default function ReportsTab({ jobs, employees, sessions, mileage, company, customers, isDesktop }) {
   const [pre, setPre] = useState('month');
   const [cs, setCs] = useState('');
   const [ce, setCe] = useState('');
@@ -77,18 +77,18 @@ export default function ReportsTab({ jobs, employees, sessions, mileage, company
   }
 
   return (
-    <div style={{ padding: '0 0 100px' }}>
+    <div style={{ padding: isDesktop ? '0 0 24px' : '0 0 100px' }}>
       {showInvoice && (
         <InvoiceModal
-          sessions={f} jobs={jobs} employees={employees}
+          sessions={f} jobs={jobs} employees={employees} customers={customers}
           dateRange={[rs, re]} company={company} onClose={() => setShowInvoice(false)}
         />
       )}
 
-      <div style={{ display: 'flex', gap: 6, padding: '16px 16px 0', overflowX: 'auto' }}>
+      <div style={{ display: 'flex', gap: 6, padding: '16px 16px 0', flexWrap: 'wrap' }}>
         {[{ id: 'week', l: '7 Days' }, { id: 'month', l: 'This Month' }, { id: 'lastmonth', l: 'Last Month' }, { id: 'year', l: 'This Year' }, { id: 'custom', l: 'Custom' }].map(p => (
           <button key={p.id} onClick={() => setPre(p.id)}
-            style={{ padding: '8px 14px', borderRadius: 20, border: pre === p.id ? 'none' : '1px solid #e0e0e0', background: pre === p.id ? '#E8651A' : '#fff', color: pre === p.id ? '#fff' : '#888', fontSize: 13, fontWeight: pre === p.id ? 700 : 400, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>
+            style={{ padding: '8px 14px', borderRadius: 20, border: pre === p.id ? 'none' : '1px solid #e0e0e0', background: pre === p.id ? '#E8651A' : '#fff', color: pre === p.id ? '#fff' : '#888', fontSize: 13, fontWeight: pre === p.id ? 700 : 400, cursor: 'pointer' }}>
             {p.l}
           </button>
         ))}
@@ -114,7 +114,7 @@ export default function ReportsTab({ jobs, employees, sessions, mileage, company
           <div style={{ color: '#E67E22', fontSize: 11, fontFamily: "'DM Mono', monospace", letterSpacing: 2, textTransform: 'uppercase', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
             <span style={{ fontSize: 14 }}>!</span> Overtime Flagged
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: empOT.length > 0 ? 16 : 0 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
             <div>
               <div style={{ color: '#aaa', fontSize: 10, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', marginBottom: 4 }}>Daily OT Days</div>
               <div style={{ fontSize: 20, fontWeight: 700, color: '#E67E22' }}>{otDays.length}</div>
@@ -123,10 +123,10 @@ export default function ReportsTab({ jobs, employees, sessions, mileage, company
               <div style={{ color: '#aaa', fontSize: 10, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', marginBottom: 4 }}>Weekly OT</div>
               <div style={{ fontSize: 20, fontWeight: 700, color: '#E67E22' }}>{otWeeks.length} wk{otWeeks.length !== 1 ? 's' : ''}</div>
             </div>
-            <div>
-              <div style={{ color: '#aaa', fontSize: 10, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', marginBottom: 4 }}>Total OT Hrs</div>
-              <div style={{ fontSize: 20, fontWeight: 700, color: '#C0392B' }}>{(totalDailyOT + totalWeeklyOT).toFixed(1)}</div>
-            </div>
+          </div>
+          <div style={{ marginBottom: empOT.length > 0 ? 16 : 0 }}>
+            <div style={{ color: '#aaa', fontSize: 10, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', marginBottom: 4 }}>Total OT Hrs</div>
+            <div style={{ fontSize: 20, fontWeight: 700, color: '#C0392B' }}>{(totalDailyOT + totalWeeklyOT).toFixed(1)}</div>
           </div>
           {empOT.length > 0 && (
             <div style={{ borderTop: '1px solid #f0f0f0', paddingTop: 12 }}>

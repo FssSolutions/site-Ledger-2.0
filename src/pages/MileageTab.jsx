@@ -4,7 +4,7 @@ import { card, ib, inp, lbl } from '../styles.js';
 import { CRA_RATE } from '../lib/constants.js';
 import { fmtCAD, todayStr } from '../lib/utils.js';
 
-export default function MileageTab({ jobs, mileage, onAdd, onDelete, busy }) {
+export default function MileageTab({ jobs, mileage, onAdd, onDelete, busy, isDesktop }) {
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState({ jobId: jobs[0]?.id || '', date: todayStr(), km: '', note: '' });
 
@@ -31,7 +31,7 @@ export default function MileageTab({ jobs, mileage, onAdd, onDelete, busy }) {
   }
 
   return (
-    <div style={{ padding: '0 0 100px' }}>
+    <div style={{ padding: isDesktop ? '0 0 24px' : '0 0 100px' }}>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, padding: '16px 16px 0' }}>
         <div style={{ ...card, padding: '16px 18px' }}>
           <div style={{ color: '#999', fontSize: 11, fontFamily: "'DM Mono', monospace", letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 6 }}>Total KM</div>

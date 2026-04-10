@@ -72,6 +72,13 @@ export const api = {
       return r.json();
     } catch { return null; }
   },
+  async upsert(t, table, body) {
+    try {
+      const r = await fetch(`${SURL}/rest/v1/${table}`, { method: 'POST', headers: { ...AH(t), Prefer: 'return=representation,resolution=merge-duplicates' }, body: JSON.stringify(body) });
+      if (r.status === 401) return { _expired: true };
+      return r.json();
+    } catch { return null; }
+  },
   async delete(t, table, id) {
     try {
       const r = await fetch(`${SURL}/rest/v1/${table}?id=eq.${id}`, { method: 'DELETE', headers: AH(t) });

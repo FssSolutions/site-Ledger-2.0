@@ -5,7 +5,7 @@ import { card, ib } from '../styles.js';
 import { MN } from '../lib/constants.js';
 import { fmtDur, fmtCAD, calcEarnings, calcDur, dayKey, calcOvertime } from '../lib/utils.js';
 
-export default function CalendarTab({ jobs, employees, sessions, onSave, onDelete, busy }) {
+export default function CalendarTab({ jobs, employees, sessions, onSave, onDelete, busy, isDesktop }) {
   const [vd, setVd] = useState(new Date());
   const [sel, setSel] = useState(null);
   const [modal, setModal] = useState(null);
@@ -32,7 +32,7 @@ export default function CalendarTab({ jobs, employees, sessions, onSave, onDelet
   const modalDate = sel ? new Date(yr, mo, sel) : new Date();
 
   return (
-    <div style={{ padding: '0 0 100px' }}>
+    <div style={{ padding: isDesktop ? '0 0 24px' : '0 0 100px' }}>
       {modal && (
         <SessionModal
           session={modal === 'add' ? null : modal}

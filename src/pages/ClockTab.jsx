@@ -4,7 +4,7 @@ import Icon from '../components/Icon.jsx';
 import { card, ib, inp, lbl } from '../styles.js';
 import { fmtDur, fmtCAD, calcEarnings, calcDur } from '../lib/utils.js';
 
-export default function ClockTab({ jobs, employees, sessions, active, onIn, onOut, onSave, onDelete, busy }) {
+export default function ClockTab({ jobs, employees, sessions, active, onIn, onOut, onSave, onDelete, busy, isDesktop }) {
   const [selJob, setSelJob] = useState(jobs[0]?.id || '');
   const [selEmp, setSelEmp] = useState('');
   const [now, setNow] = useState(Date.now());
@@ -22,14 +22,14 @@ export default function ClockTab({ jobs, employees, sessions, active, onIn, onOu
   const dailyOT = Math.max(0, todayHrs - 8);
 
   return (
-    <div style={{ padding: '0 0 100px' }}>
+    <div style={{ padding: isDesktop ? '0 0 24px' : '0 0 100px' }}>
       {editSess && (
         <SessionModal session={editSess} jobs={jobs} employees={employees}
           onSave={s => { onSave(s); setEditSess(null); }}
           onClose={() => setEditSess(null)} busy={busy} />
       )}
 
-      <div style={{ ...card, padding: '20px 24px', margin: '16px 16px 0' }}>
+      <div style={{ ...card, padding: '16px 20px', margin: '16px 16px 0' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <div style={{ color: '#999', fontSize: 11, fontFamily: "'DM Mono', monospace", letterSpacing: 2, textTransform: 'uppercase' }}>Today</div>
           {dailyOT > 0 && (
@@ -38,7 +38,7 @@ export default function ClockTab({ jobs, employees, sessions, active, onIn, onOu
             </div>
           )}
         </div>
-        <div style={{ display: 'flex', gap: 32 }}>
+        <div style={{ display: 'flex', gap: 20 }}>
           <div>
             <div style={{ fontSize: 28, fontWeight: 700, fontFamily: "'Syne', sans-serif", color: '#111', lineHeight: 1 }}>{fmtCAD(todayEarn)}</div>
             <div style={{ color: '#999', fontSize: 12, marginTop: 4 }}>earned</div>
@@ -62,7 +62,7 @@ export default function ClockTab({ jobs, employees, sessions, active, onIn, onOu
         </div>
       )}
 
-      <div style={{ ...card, margin: '12px 16px 0', padding: '20px 24px' }}>
+      <div style={{ ...card, margin: '12px 16px 0', padding: '16px 20px' }}>
         {!active ? (
           <>
             <label style={lbl}>Select Job</label>

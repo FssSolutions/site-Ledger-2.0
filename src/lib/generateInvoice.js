@@ -2,7 +2,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { calcDur, calcEarnings, fmtCAD } from './utils.js';
 
-export default function generateInvoice({ sessions, jobs, employees, dateRange, company, clientName, invoiceNum, selectedJobIds }) {
+export default function generateInvoice({ sessions, jobs, employees, dateRange, company, customer, invoiceNum, selectedJobIds }) {
   const [rs, re] = dateRange;
 
   // Filter sessions by date range and optionally by selected jobs
@@ -60,16 +60,21 @@ export default function generateInvoice({ sessions, jobs, employees, dateRange, 
   y = Math.max(cy, y + 28) + 6;
 
   // Bill To
-  if (clientName) {
+  if (customer) {
     doc.setTextColor(100);
     doc.setFont('helvetica', 'normal');
     doc.text('Bill To:', 14, y);
     y += 6;
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(0);
-    doc.text(clientName, 14, y);
+    doc.text(customer.name, 14, y);
     doc.setFont('helvetica', 'normal');
-    y += 10;
+    y += 5;
+    doc.setTextColor(60);
+    if (customer.address) { doc.text(customer.address, 14, y); y += 5; }
+    if (customer.phone) { doc.text(customer.phone, 14, y); y += 5; }
+    if (customer.email) { doc.text(customer.email, 14, y); y += 5; }
+    y += 5;
   }
 
   // Labour table
