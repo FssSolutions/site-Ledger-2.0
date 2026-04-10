@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import Icon from '../components/Icon.jsx';
 import { card, ib, inp, lbl } from '../styles.js';
 import { JOB_COLORS } from '../lib/constants.js';
@@ -15,7 +15,7 @@ function Swatches({ ci, setCi }) {
   );
 }
 
-export default function JobsTab({ jobs, onAdd, onUpdate, onDelete, employees, onAddEmp, onUpdateEmp, onDeleteEmp }) {
+export default function JobsTab({ jobs, onAdd, onUpdate, onDelete, employees, onAddEmp, onUpdateEmp, onDeleteEmp, company, onUpdateCompany }) {
   const [view, setView] = useState('jobs');
   const [showAdd, setShowAdd] = useState(false);
   const [editId, setEditId] = useState(null);
@@ -24,14 +24,32 @@ export default function JobsTab({ jobs, onAdd, onUpdate, onDelete, employees, on
   const [showAddEmp, setShowAddEmp] = useState(false);
   const [editEmpId, setEditEmpId] = useState(null);
   const [empForm, setEmpForm] = useState({ name: '', rate: '' });
+  const [compForm, setCompForm] = useState(company || {});
+  const [compSaved, setCompSaved] = useState(false);
+  const fileRef = useRef(null);
+
+  function handleLogoUpload(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 500000) { alert('Logo must be under 500KB'); return; }
+    const reader = new FileReader();
+    reader.onload = () => setCompForm(p => ({ ...p, logo: reader.result }));
+    reader.readAsDataURL(file);
+  }
+
+  function saveCompany() {
+    onUpdateCompany(compForm);
+    setCompSaved(true);
+    setTimeout(() => setCompSaved(false), 2000);
+  }
 
   return (
     <div style={{ padding: '0 0 100px' }}>
       <div style={{ display: 'flex', background: '#eee', borderRadius: 12, padding: 4, margin: '16px 16px 0', border: '1px solid #e0e0e0' }}>
-        {[['jobs', 'Jobs'], ['crew', 'Crew']].map(([v, l]) => (
+        {[['jobs', 'Jobs'], ['crew', 'Crew'], ['company', 'Company']].map(([v, l]) => (
           <button key={v} onClick={() => setView(v)}
             style={{ flex: 1, padding: '9px', borderRadius: 9, border: 'none', background: view === v ? '#E8651A' : 'transparent', color: view === v ? '#fff' : '#888', fontWeight: view === v ? 700 : 400, cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-            <Icon name={v === 'jobs' ? 'note' : 'users'} size={14} />{l}
+            <Icon name={v === 'jobs' ? 'note' : v === 'crew' ? 'users' : 'cog'} size={14} />{l}
           </button>
         ))}
       </div>
@@ -137,6 +155,75 @@ export default function JobsTab({ jobs, onAdd, onUpdate, onDelete, employees, on
               <Icon name="plus" size={14} /> Add Crew Member
             </button>
           )}
+        </div>
+      )}
+
+      {view === 'company' && (
+        <div style={{ padding: '12px 16px 0' }}>
+          <div style={{ ...card, padding: '20px 18px' }}>
+            <div style={{ color: '#999', fontSize: 11, fontFamily: "'DM Mono', monospace", letterSpacing: 2, textTransform: 'uppercase', marginBottom: 16 }}>Company Profile</div>
+            <div style={{ color: '#aaa', fontSize: 12, marginBottom: 16 }}>This info appears on your invoices.</div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {/* Logo */}
+              <div>
+                <label style={lbl}>Logo</label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  {compForm.logo ? (
+                    <div style={{ position: 'relative' }}>
+                      <img src={compForm.logo} alt="Logo" style={{ width: 60, height: 60, objectFit: 'contain', borderRadius: 8, border: '1px solid #e0e0e0' }} />
+                      <button onClick={() => setCompForm(p => ({ ...p, logo: '' }))}
+                        style={{ position: 'absolute', top: -6, right: -6, width: 20, height: 20, borderRadius: '50%', background: '#e74c3c', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        &times;
+                      </button>
+                    </div>
+                  ) : (
+                    <button onClick={() => fileRef.current?.click()}
+                      style={{ width: 60, height: 60, borderRadius: 8, border: '2px dashed #ddd', background: 'transparent', cursor: 'pointer', color: '#bbb', fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      Upload
+                    </button>
+                  )}
+                  <input ref={fileRef} type="file" accept="image/*" onChange={handleLogoUpload} style={{ display: 'none' }} />
+                  <div style={{ color: '#bbb', fontSize: 11 }}>PNG or JPG, max 500KB</div>
+                </div>
+              </div>
+
+              <div>
+                <label style={lbl}>Company Name</label>
+                <input style={inp} value={compForm.name || ''} onChange={e => setCompForm(p => ({ ...p, name: e.target.value }))} placeholder="e.g. Smith Carpentry Ltd." />
+              </div>
+
+              <div>
+                <label style={lbl}>Phone</label>
+                <input style={inp} type="tel" value={compForm.phone || ''} onChange={e => setCompForm(p => ({ ...p, phone: e.target.value }))} placeholder="e.g. (604) 555-1234" />
+              </div>
+
+              <div>
+                <label style={lbl}>Email</label>
+                <input style={inp} type="email" value={compForm.email || ''} onChange={e => setCompForm(p => ({ ...p, email: e.target.value }))} placeholder="e.g. info@smithcarpentry.ca" />
+              </div>
+
+              <div>
+                <label style={lbl}>Address</label>
+                <input style={inp} value={compForm.address || ''} onChange={e => setCompForm(p => ({ ...p, address: e.target.value }))} placeholder="e.g. 123 Main St, Vancouver, BC" />
+              </div>
+
+              <div>
+                <label style={lbl}>GST Number</label>
+                <input style={inp} value={compForm.gstNumber || ''} onChange={e => setCompForm(p => ({ ...p, gstNumber: e.target.value }))} placeholder="e.g. 123456789 RT0001" />
+              </div>
+
+              <div>
+                <label style={lbl}>WorkSafe BC Number</label>
+                <input style={inp} value={compForm.worksafeNumber || ''} onChange={e => setCompForm(p => ({ ...p, worksafeNumber: e.target.value }))} placeholder="e.g. 1234567" />
+              </div>
+
+              <button onClick={saveCompany}
+                style={{ width: '100%', padding: '14px', borderRadius: 12, border: 'none', background: compSaved ? '#3BB273' : '#E8651A', color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: "'Syne', sans-serif", marginTop: 4 }}>
+                {compSaved ? 'Saved!' : 'Save Company Info'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

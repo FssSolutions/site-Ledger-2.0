@@ -1,43 +1,76 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { calcDur, calcEarnings, fmtCAD, dayKey } from './utils.js';
-import { CRA_RATE } from './constants.js';
+import { calcDur, calcEarnings, fmtCAD } from './utils.js';
 
-export default function generateInvoice({ sessions, jobs, employees, mileage, dateRange, companyName, clientName, invoiceNum }) {
+export default function generateInvoice({ sessions, jobs, employees, dateRange, company, clientName, invoiceNum, selectedJobIds }) {
   const [rs, re] = dateRange;
+
+  // Filter sessions by date range and optionally by selected jobs
   const f = sessions.filter(s => {
+    if (!s.end_time) return false;
     const t = new Date(s.start_time);
-    return t >= rs && t <= re && s.end_time;
-  });
-  const fm = mileage.filter(m => {
-    const t = new Date(m.date);
-    return t >= rs && t <= re;
+    if (t < rs || t > re) return false;
+    if (selectedJobIds && selectedJobIds.length > 0) {
+      return selectedJobIds.includes(s.job_id);
+    }
+    return true;
   });
 
   const doc = new jsPDF();
   const pw = doc.internal.pageSize.getWidth();
 
-  // Header
-  doc.setFontSize(22);
-  doc.setFont('helvetica', 'bold');
-  doc.text('INVOICE', 14, 22);
+  let y = 14;
 
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(100);
-  if (companyName) doc.text(companyName, 14, 30);
-  doc.text(`Invoice #: ${invoiceNum || 'INV-001'}`, pw - 14, 22, { align: 'right' });
-  doc.text(`Date: ${new Date().toLocaleDateString('en-CA')}`, pw - 14, 28, { align: 'right' });
-  doc.text(`Period: ${rs.toLocaleDateString('en-CA')} to ${re.toLocaleDateString('en-CA')}`, pw - 14, 34, { align: 'right' });
-
-  if (clientName) {
-    doc.text('Bill To:', 14, 42);
-    doc.setFont('helvetica', 'bold');
-    doc.text(clientName, 14, 48);
-    doc.setFont('helvetica', 'normal');
+  // Company logo
+  if (company.logo) {
+    try {
+      doc.addImage(company.logo, 'JPEG', 14, y, 30, 30);
+      y += 4; // text starts beside logo
+    } catch {
+      // skip logo if it fails
+    }
   }
 
-  let y = clientName ? 58 : 44;
+  const logoOffset = company.logo ? 50 : 14;
+
+  // Header — INVOICE title
+  doc.setFontSize(22);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(232, 101, 26);
+  doc.text('INVOICE', logoOffset, y + 8);
+
+  // Company info below title
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(60);
+  let cy = y + 16;
+  if (company.name) { doc.setFont('helvetica', 'bold'); doc.text(company.name, logoOffset, cy); doc.setFont('helvetica', 'normal'); cy += 5; }
+  if (company.address) { doc.text(company.address, logoOffset, cy); cy += 5; }
+  if (company.phone) { doc.text(company.phone, logoOffset, cy); cy += 5; }
+  if (company.email) { doc.text(company.email, logoOffset, cy); cy += 5; }
+  if (company.gstNumber) { doc.text(`GST #: ${company.gstNumber}`, logoOffset, cy); cy += 5; }
+  if (company.worksafeNumber) { doc.text(`WorkSafe BC #: ${company.worksafeNumber}`, logoOffset, cy); cy += 5; }
+
+  // Invoice details — right side
+  doc.setTextColor(100);
+  doc.text(`Invoice #: ${invoiceNum || 'INV-001'}`, pw - 14, y + 8, { align: 'right' });
+  doc.text(`Date: ${new Date().toLocaleDateString('en-CA')}`, pw - 14, y + 14, { align: 'right' });
+  doc.text(`Period: ${rs.toLocaleDateString('en-CA')} to ${re.toLocaleDateString('en-CA')}`, pw - 14, y + 20, { align: 'right' });
+
+  y = Math.max(cy, y + 28) + 6;
+
+  // Bill To
+  if (clientName) {
+    doc.setTextColor(100);
+    doc.setFont('helvetica', 'normal');
+    doc.text('Bill To:', 14, y);
+    y += 6;
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(0);
+    doc.text(clientName, 14, y);
+    doc.setFont('helvetica', 'normal');
+    y += 10;
+  }
 
   // Labour table
   const labourRows = f.map(s => {
@@ -55,7 +88,7 @@ export default function generateInvoice({ sessions, jobs, employees, mileage, da
     ];
   });
 
-  const totalEarnings = f.reduce((s, x) => s + calcEarnings(x, jobs), 0);
+  const subtotal = f.reduce((s, x) => s + calcEarnings(x, jobs), 0);
   const totalHours = (f.reduce((s, x) => s + calcDur(x), 0) / 3600000).toFixed(2);
 
   if (labourRows.length > 0) {
@@ -69,7 +102,7 @@ export default function generateInvoice({ sessions, jobs, employees, mileage, da
       startY: y,
       head: [['Date', 'Job', 'Employee', 'Hours', 'Rate', 'Amount']],
       body: labourRows,
-      foot: [['', '', 'Total', totalHours, '', fmtCAD(totalEarnings)]],
+      foot: [['', '', 'Subtotal', totalHours, '', fmtCAD(subtotal)]],
       theme: 'grid',
       headStyles: { fillColor: [232, 101, 26], textColor: 255, fontStyle: 'bold', fontSize: 9 },
       footStyles: { fillColor: [245, 245, 245], textColor: [0, 0, 0], fontStyle: 'bold', fontSize: 9 },
@@ -80,52 +113,40 @@ export default function generateInvoice({ sessions, jobs, employees, mileage, da
     y = doc.lastAutoTable.finalY + 12;
   }
 
-  // Mileage table
-  const totalKm = fm.reduce((s, x) => s + Number(x.km), 0);
-  if (fm.length > 0) {
-    doc.setFontSize(12);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(0);
-    doc.text('Mileage', 14, y);
-    y += 4;
+  // GST + Total summary
+  const gst = subtotal * 0.05;
+  const grandTotal = subtotal + gst;
 
-    const mileageRows = fm.map(m => {
-      const j = jobs.find(x => x.id === m.job_id);
-      return [
-        new Date(m.date).toLocaleDateString('en-CA'),
-        j?.name || '',
-        m.origin + ' \u2192 ' + m.destination,
-        Number(m.km).toFixed(1) + ' km',
-        fmtCAD(Number(m.km) * CRA_RATE)
-      ];
-    });
+  const summaryX = pw - 80;
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(60);
+  doc.text('Subtotal:', summaryX, y);
+  doc.text(fmtCAD(subtotal), pw - 14, y, { align: 'right' });
+  y += 7;
+  doc.text('GST (5%):', summaryX, y);
+  doc.text(fmtCAD(gst), pw - 14, y, { align: 'right' });
+  y += 4;
 
-    autoTable(doc, {
-      startY: y,
-      head: [['Date', 'Job', 'Route', 'Distance', 'Deduction']],
-      body: mileageRows,
-      foot: [['', '', 'Total', totalKm.toFixed(1) + ' km', fmtCAD(totalKm * CRA_RATE)]],
-      theme: 'grid',
-      headStyles: { fillColor: [232, 101, 26], textColor: 255, fontStyle: 'bold', fontSize: 9 },
-      footStyles: { fillColor: [245, 245, 245], textColor: [0, 0, 0], fontStyle: 'bold', fontSize: 9 },
-      styles: { fontSize: 8, cellPadding: 3 },
-      columnStyles: { 3: { halign: 'right' }, 4: { halign: 'right' } },
-    });
-
-    y = doc.lastAutoTable.finalY + 12;
-  }
-
-  // Grand total
-  const grandTotal = totalEarnings + totalKm * CRA_RATE;
   doc.setDrawColor(232, 101, 26);
   doc.setLineWidth(0.5);
-  doc.line(pw - 80, y, pw - 14, y);
+  doc.line(summaryX, y, pw - 14, y);
   y += 8;
+
   doc.setFontSize(14);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(0);
-  doc.text('Total Due:', pw - 80, y);
+  doc.text('Total Due:', summaryX, y);
   doc.text(fmtCAD(grandTotal), pw - 14, y, { align: 'right' });
+
+  // GST number reminder at bottom of totals
+  if (company.gstNumber) {
+    y += 8;
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(130);
+    doc.text(`GST Registration: ${company.gstNumber}`, summaryX, y);
+  }
 
   // Footer
   const ph = doc.internal.pageSize.getHeight();

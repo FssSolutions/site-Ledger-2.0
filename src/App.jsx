@@ -27,6 +27,9 @@ export default function App() {
   const [sessions, setSessions] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [mileage, setMileage] = useState([]);
+  const [company, setCompany] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('sl_company') || '{}'); } catch { return {}; }
+  });
   const [active, setActive] = useState(null);
   const [tab, setTab] = useState('clock');
   const [busy, setBusy] = useState(false);
@@ -386,6 +389,11 @@ export default function App() {
     catch { toast('Failed to delete trip.'); }
   }
 
+  function updateCompany(data) {
+    setCompany(data);
+    localStorage.setItem('sl_company', JSON.stringify(data));
+  }
+
   async function signOut() {
     if (token) await api.signOut(token);
     clearAuth();
@@ -426,8 +434,8 @@ export default function App() {
           {tab === 'clock' && <ClockTab jobs={jobs} employees={employees} sessions={sessions} active={active} onIn={clockIn} onOut={clockOut} onSave={saveSession} onDelete={deleteSession} busy={busy} />}
           {tab === 'calendar' && <CalendarTab jobs={jobs} employees={employees} sessions={sessions} onSave={saveSession} onDelete={deleteSession} busy={busy} />}
           {tab === 'mileage' && <MileageTab jobs={jobs} mileage={mileage} onAdd={addMileage} onDelete={deleteMileage} busy={busy} />}
-          {tab === 'reports' && <ReportsTab jobs={jobs} employees={employees} sessions={sessions} mileage={mileage} />}
-          {tab === 'jobs' && <JobsTab jobs={jobs} onAdd={addJob} onUpdate={updateJob} onDelete={deleteJob} employees={employees} onAddEmp={addEmployee} onUpdateEmp={updateEmployee} onDeleteEmp={deleteEmployee} />}
+          {tab === 'reports' && <ReportsTab jobs={jobs} employees={employees} sessions={sessions} mileage={mileage} company={company} />}
+          {tab === 'jobs' && <JobsTab jobs={jobs} onAdd={addJob} onUpdate={updateJob} onDelete={deleteJob} employees={employees} onAddEmp={addEmployee} onUpdateEmp={updateEmployee} onDeleteEmp={deleteEmployee} company={company} onUpdateCompany={updateCompany} />}
         </>
       )}
 

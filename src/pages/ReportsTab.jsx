@@ -5,7 +5,7 @@ import { card, inp } from '../styles.js';
 import { CRA_RATE } from '../lib/constants.js';
 import { fmtDur, fmtCAD, calcEarnings, calcDur, calcOvertime } from '../lib/utils.js';
 
-export default function ReportsTab({ jobs, employees, sessions, mileage }) {
+export default function ReportsTab({ jobs, employees, sessions, mileage, company }) {
   const [pre, setPre] = useState('month');
   const [cs, setCs] = useState('');
   const [ce, setCe] = useState('');
@@ -80,8 +80,8 @@ export default function ReportsTab({ jobs, employees, sessions, mileage }) {
     <div style={{ padding: '0 0 100px' }}>
       {showInvoice && (
         <InvoiceModal
-          sessions={f} jobs={jobs} employees={employees} mileage={fm}
-          dateRange={[rs, re]} onClose={() => setShowInvoice(false)}
+          sessions={f} jobs={jobs} employees={employees}
+          dateRange={[rs, re]} company={company} onClose={() => setShowInvoice(false)}
         />
       )}
 
