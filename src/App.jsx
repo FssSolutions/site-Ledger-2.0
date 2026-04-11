@@ -14,6 +14,8 @@ import ReportsTab from './pages/ReportsTab.jsx';
 import JobsTab from './pages/JobsTab.jsx';
 import CompanyTab from './pages/CompanyTab.jsx';
 import { useWindowWidth } from './hooks/useWindowWidth.js';
+import AccentColorContext from './lib/AccentColorContext.js';
+import SettingsModal from './components/SettingsModal.jsx';
 
 const TABS = [
   { id: 'clock', l: 'Clock', i: 'clock' },
@@ -51,7 +53,7 @@ export default function App() {
   });
   const [customers, setCustomers] = useState([]);
   const [active, setActive] = useState(null);
-  const [tab, setTab] = useState('clock');
+  const [tab, setTab] = useState(() => localStorage.getItem('sl_default_tab') || 'clock');
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState(false);
@@ -63,6 +65,9 @@ export default function App() {
   const token = authData?.access_token;
   const width = useWindowWidth();
   const isDesktop = width >= 768;
+  const [accentColor, setAccentColor] = useState(() => localStorage.getItem('sl_accent_color') || '#E8651A');
+  const [showSettings, setShowSettings] = useState(false);
+  const [taxRate, setTaxRate] = useState(() => parseFloat(localStorage.getItem('sl_tax_rate') || '5'));
 
   function toast(message, type = 'error') {
     const id = Date.now();
@@ -502,7 +507,7 @@ export default function App() {
     </div>
   );
 
-  if (!authData) return <AuthScreen onAuth={d => { saveAuth(d); setAuthData(d); }} />;
+  if (!authData) return <AccentColorContext.Provider value={accentColor}><AuthScreen onAuth={d => { saveAuth(d); setAuthData(d); }} /></AccentColorContext.Provider>;
 
   // --- Desktop layout ---
   if (isDesktop) {

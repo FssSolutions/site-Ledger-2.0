@@ -1,9 +1,11 @@
 import { useState } from 'react';
+import { useAccentColor } from '../lib/AccentColorContext.js';
 import { api } from '../lib/api.js';
 import { saveAuth } from '../lib/auth.js';
 import { inp, lbl } from '../styles.js';
 
 export default function AuthScreen({ onAuth }) {
+  const accent = useAccentColor();
   const [mode, setMode] = useState('signup'); // signup | signin | forgot
   const [email, setEmail] = useState('');
   const [pw, setPw] = useState('');
@@ -47,7 +49,7 @@ export default function AuthScreen({ onAuth }) {
     <div style={{ maxWidth: 430, margin: '0 auto', minHeight: '100vh', background: '#f4f4f4', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '40px 24px' }}>
       <div style={{ marginBottom: 36 }}>
         <div style={{ fontSize: 36, fontWeight: 800, fontFamily: "'Syne', sans-serif", color: '#111', letterSpacing: -1 }}>
-          Site<span style={{ color: '#E8651A' }}>Ledger</span>
+          Site<span style={{ color: accent }}>Ledger</span>
         </div>
         <div style={{ color: '#999', fontSize: 14, marginTop: 6 }}>Time tracking for the job site</div>
       </div>

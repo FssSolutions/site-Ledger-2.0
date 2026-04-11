@@ -2,10 +2,15 @@ import { useState } from 'react';
 import { Modal, ModalHeader } from './Modal.jsx';
 import { inp, lbl, card } from '../styles.js';
 import generateInvoice from '../lib/generateInvoice.js';
+import { useAccentColor } from '../lib/AccentColorContext.js';
 
-export default function InvoiceModal({ sessions, jobs, employees, customers, dateRange, company, onClose }) {
+export default function InvoiceModal({ sessions, jobs, employees, customers, dateRange, company, taxRate, onClose }) {
+  const accent = useAccentColor();
   const [selectedCustId, setSelectedCustId] = useState('');
-  const [invoiceNum, setInvoiceNum] = useState('INV-001');
+  const [invoiceNum, setInvoiceNum] = useState(() => {
+    const n = parseInt(localStorage.getItem('sl_next_invoice_num') || '1', 10);
+    return `INV-${String(n).padStart(3, '0')}`;
+  });
   const [selectedJobIds, setSelectedJobIds] = useState([]);
   const [done, setDone] = useState(false);
 
@@ -35,7 +40,14 @@ export default function InvoiceModal({ sessions, jobs, employees, customers, dat
       customer: selectedCustomer,
       invoiceNum,
       selectedJobIds: selectedJobIds.length > 0 ? selectedJobIds : null,
+      accentColor: accent,
+      taxRate,
     });
+    const match = invoiceNum.match(/(\d+)/);
+    if (match) {
+      const next = parseInt(match[1], 10) + 1;
+      localStorage.setItem('sl_next_invoice_num', String(next));
+    }
     setDone(true);
     setTimeout(() => setDone(false), 2000);
   }

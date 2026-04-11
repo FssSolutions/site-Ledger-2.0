@@ -47,22 +47,6 @@ export default function ReportsTab({ jobs, employees, sessions, mileage, company
     return { ...e, dailyOT, weeklyOT };
   }).filter(e => e.dailyOT > 0 || e.weeklyOT > 0);
 
-  function exportIIF() {
-    const lines = ['!TIMERJOB\tJOBNAME\tTIMEBILLED\tJOBDESC'];
-    lines.push('!TIMEACT\tDATE\tJOBNAME\tEMP\tSERVICEITEM\tDURATION\tDESC\tBILLINGSTATUS');
-    f.forEach(s => {
-      const j = jobs.find(x => x.id === s.job_id);
-      const emp = employees.find(x => x.id === s.employee_id);
-      const hrs = (calcDur(s) / 3600000).toFixed(2);
-      const d = new Date(s.start_time);
-      lines.push(`TIMEACT\t${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear()}\t${j?.name || ''}\t${emp?.name || 'Owner'}\tServices\t${hrs}\t\t1`);
-    });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob([lines.join('\n')], { type: 'text/plain' }));
-    a.download = 'site-ledger-quickbooks.iif';
-    a.click();
-  }
-
   function exportCSV() {
     const rows = [['Date', 'Job', 'Employee', 'Start', 'End', 'Hours', 'Earnings (CAD)']];
     f.forEach(s => {
@@ -215,9 +199,6 @@ export default function ReportsTab({ jobs, employees, sessions, mileage, company
           </button>
           <button onClick={exportCSV} style={{ width: '100%', padding: '12px', borderRadius: 12, border: '1px solid #e0e0e0', background: '#fff', color: '#888', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
             <Icon name="dl" size={14} /> Export CSV
-          </button>
-          <button onClick={exportIIF} style={{ width: '100%', padding: '12px', borderRadius: 12, border: '1px solid #2E86AB44', background: '#2E86AB11', color: '#2E86AB', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-            <Icon name="qb" size={14} /> Export for QuickBooks (.IIF)
           </button>
         </div>
       )}
