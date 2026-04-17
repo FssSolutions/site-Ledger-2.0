@@ -2,8 +2,19 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { calcDur, calcEarnings, fmtCAD } from './utils.js';
 
-export default function generateInvoice({ sessions, jobs, employees, dateRange, company, customer, invoiceNum, selectedJobIds }) {
+function hexToRgb(hex) {
+  if (typeof hex !== 'string') return [232, 101, 26];
+  const m = hex.trim().match(/^#?([0-9a-f]{3}|[0-9a-f]{6})$/i);
+  if (!m) return [232, 101, 26];
+  let h = m[1];
+  if (h.length === 3) h = h.split('').map(c => c + c).join('');
+  return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+}
+
+export default function generateInvoice({ sessions, jobs, employees, dateRange, company, customer, invoiceNum, selectedJobIds, accentColor, taxRate }) {
   const [rs, re] = dateRange;
+  const accentRgb = hexToRgb(accentColor);
+  const taxPct = Number.isFinite(taxRate) ? taxRate : 5;
 
   // Filter sessions by date range and optionally by selected jobs
   const f = sessions.filter(s => {
@@ -36,7 +47,7 @@ export default function generateInvoice({ sessions, jobs, employees, dateRange, 
   // Header — INVOICE title
   doc.setFontSize(22);
   doc.setFont('helvetica', 'bold');
-  doc.setTextColor(232, 101, 26);
+  doc.setTextColor(accentRgb[0], accentRgb[1], accentRgb[2]);
   doc.text('INVOICE', logoOffset, y + 8);
 
   // Company info below title
@@ -109,7 +120,7 @@ export default function generateInvoice({ sessions, jobs, employees, dateRange, 
       body: labourRows,
       foot: [['', '', 'Subtotal', totalHours, '', fmtCAD(subtotal)]],
       theme: 'grid',
-      headStyles: { fillColor: [232, 101, 26], textColor: 255, fontStyle: 'bold', fontSize: 9 },
+      headStyles: { fillColor: accentRgb, textColor: 255, fontStyle: 'bold', fontSize: 9 },
       footStyles: { fillColor: [245, 245, 245], textColor: [0, 0, 0], fontStyle: 'bold', fontSize: 9 },
       styles: { fontSize: 8, cellPadding: 3 },
       columnStyles: { 3: { halign: 'right' }, 4: { halign: 'right' }, 5: { halign: 'right' } },
@@ -119,7 +130,7 @@ export default function generateInvoice({ sessions, jobs, employees, dateRange, 
   }
 
   // GST + Total summary
-  const gst = subtotal * 0.05;
+  const gst = subtotal * (taxPct / 100);
   const grandTotal = subtotal + gst;
 
   const summaryX = pw - 80;
@@ -129,11 +140,12 @@ export default function generateInvoice({ sessions, jobs, employees, dateRange, 
   doc.text('Subtotal:', summaryX, y);
   doc.text(fmtCAD(subtotal), pw - 14, y, { align: 'right' });
   y += 7;
-  doc.text('GST (5%):', summaryX, y);
+  const taxLabel = `GST (${Number.isInteger(taxPct) ? taxPct : taxPct.toFixed(2).replace(/\.?0+$/, '')}%):`;
+  doc.text(taxLabel, summaryX, y);
   doc.text(fmtCAD(gst), pw - 14, y, { align: 'right' });
   y += 4;
 
-  doc.setDrawColor(232, 101, 26);
+  doc.setDrawColor(accentRgb[0], accentRgb[1], accentRgb[2]);
   doc.setLineWidth(0.5);
   doc.line(summaryX, y, pw - 14, y);
   y += 8;

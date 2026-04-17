@@ -66,8 +66,11 @@ export default function App() {
   const width = useWindowWidth();
   const isDesktop = width >= 768;
   const [accentColor, setAccentColor] = useState(() => localStorage.getItem('sl_accent_color') || '#E8651A');
-  const [showSettings, setShowSettings] = useState(false);
   const [taxRate, setTaxRate] = useState(() => parseFloat(localStorage.getItem('sl_tax_rate') || '5'));
+  const [showSettings, setShowSettings] = useState(false);
+
+  useEffect(() => { localStorage.setItem('sl_accent_color', accentColor); }, [accentColor]);
+  useEffect(() => { localStorage.setItem('sl_tax_rate', String(taxRate)); }, [taxRate]);
 
   function toast(message, type = 'error') {
     const id = Date.now();
@@ -489,7 +492,7 @@ export default function App() {
       {tab === 'clock' && <ClockTab jobs={jobs} employees={employees} sessions={sessions} active={active} onIn={clockIn} onOut={clockOut} onSave={saveSession} onDelete={deleteSession} busy={busy} isDesktop={isDesktop} />}
       {tab === 'calendar' && <CalendarTab jobs={jobs} employees={employees} sessions={sessions} onSave={saveSession} onDelete={deleteSession} busy={busy} isDesktop={isDesktop} />}
       {tab === 'mileage' && <MileageTab jobs={jobs} mileage={mileage} onAdd={addMileage} onDelete={deleteMileage} busy={busy} isDesktop={isDesktop} />}
-      {tab === 'reports' && <ReportsTab jobs={jobs} employees={employees} sessions={sessions} mileage={mileage} company={company} customers={customers} isDesktop={isDesktop} />}
+      {tab === 'reports' && <ReportsTab jobs={jobs} employees={employees} sessions={sessions} mileage={mileage} company={company} customers={customers} taxRate={taxRate} isDesktop={isDesktop} />}
       {tab === 'jobs' && <JobsTab jobs={jobs} onAdd={addJob} onUpdate={updateJob} onDelete={deleteJob} isDesktop={isDesktop} />}
       {tab === 'company' && <CompanyTab employees={employees} onAddEmp={addEmployee} onUpdateEmp={updateEmployee} onDeleteEmp={deleteEmployee} customers={customers} onAddCust={addCustomer} onUpdateCust={updateCustomer} onDeleteCust={deleteCustomer} company={company} onUpdateCompany={updateCompany} isDesktop={isDesktop} />}
     </>
@@ -507,11 +510,26 @@ export default function App() {
     </div>
   );
 
-  if (!authData) return <AccentColorContext.Provider value={accentColor}><AuthScreen onAuth={d => { saveAuth(d); setAuthData(d); }} /></AccentColorContext.Provider>;
+  const settingsModal = showSettings ? (
+    <SettingsModal
+      accentColor={accentColor}
+      onAccentChange={setAccentColor}
+      taxRate={taxRate}
+      onTaxChange={setTaxRate}
+      onClose={() => setShowSettings(false)}
+    />
+  ) : null;
+
+  if (!authData) return (
+    <AccentColorContext.Provider value={accentColor}>
+      <AuthScreen onAuth={d => { saveAuth(d); setAuthData(d); }} />
+    </AccentColorContext.Provider>
+  );
 
   // --- Desktop layout ---
   if (isDesktop) {
     return (
+      <AccentColorContext.Provider value={accentColor}>
       <div style={{ display: 'flex', height: '100vh', background: '#f4f4f4', fontFamily: "'DM Sans', sans-serif" }}>
         {/* Toasts — fixed top-right */}
         <div style={{ position: 'fixed', top: 16, right: 16, zIndex: 1000, display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -522,9 +540,9 @@ export default function App() {
         <div style={{ width: 220, minWidth: 220, height: '100vh', background: '#fff', borderRight: '1px solid #e8e8e8', display: 'flex', flexDirection: 'column', position: 'sticky', top: 0, flexShrink: 0 }}>
           <div style={{ padding: '24px 20px 20px', borderBottom: '1px solid #f0f0f0' }}>
             <div style={{ fontSize: 22, fontWeight: 800, fontFamily: "'Syne', sans-serif", color: '#111', letterSpacing: -0.5 }}>
-              Site<span style={{ color: '#E8651A' }}>Ledger</span>
+              Site<span style={{ color: accentColor }}>Ledger</span>
             </div>
-            {active && <div style={{ fontSize: 11, color: '#E8651A', fontFamily: "'DM Mono', monospace", letterSpacing: 1, marginTop: 4 }}>● CLOCKED IN</div>}
+            {active && <div style={{ fontSize: 11, color: accentColor, fontFamily: "'DM Mono', monospace", letterSpacing: 1, marginTop: 4 }}>● CLOCKED IN</div>}
           </div>
           <div style={{ flex: 1, padding: '12px 12px 0', display: 'flex', flexDirection: 'column', gap: 2, overflowY: 'auto' }}>
             {TABS.map(t => (
@@ -535,7 +553,10 @@ export default function App() {
               </button>
             ))}
           </div>
-          <div style={{ padding: '16px 12px', borderTop: '1px solid #f0f0f0' }}>
+          <div style={{ padding: '16px 12px', borderTop: '1px solid #f0f0f0', display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <button onClick={() => setShowSettings(true)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10, border: 'none', background: 'transparent', color: '#666', fontSize: 13, cursor: 'pointer', width: '100%', fontFamily: "'DM Sans', sans-serif", textAlign: 'left' }}>
+              <Icon name="cog" size={16} /> Settings
+            </button>
             <button onClick={signOut} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10, border: 'none', background: 'transparent', color: '#aaa', fontSize: 13, cursor: 'pointer', width: '100%', fontFamily: "'DM Sans', sans-serif" }}>
               <Icon name="logout" size={16} /> Sign Out
             </button>
@@ -549,12 +570,15 @@ export default function App() {
             {loading ? loadingState : loadError ? errorState : tabContent}
           </div>
         </div>
+        {settingsModal}
       </div>
+      </AccentColorContext.Provider>
     );
   }
 
-  // --- Mobile layout (unchanged) ---
+  // --- Mobile layout ---
   return (
+    <AccentColorContext.Provider value={accentColor}>
     <div style={{ maxWidth: 430, margin: '0 auto', minHeight: '100vh', background: '#f4f4f4', fontFamily: "'DM Sans', sans-serif", position: 'relative' }}>
       {toasts.map(t => (
         <Toast key={t.id} message={t.message} type={t.type} onDone={() => removeToast(t.id)} />
@@ -565,11 +589,14 @@ export default function App() {
       <div style={{ padding: '20px 20px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #e8e8e8', background: '#fff' }}>
         <div>
           <div style={{ fontSize: 20, fontWeight: 800, fontFamily: "'Syne', sans-serif", color: '#111', letterSpacing: -0.5 }}>
-            Site<span style={{ color: '#E8651A' }}>Ledger</span>
+            Site<span style={{ color: accentColor }}>Ledger</span>
           </div>
-          {active && <div style={{ fontSize: 11, color: '#E8651A', fontFamily: "'DM Mono', monospace", letterSpacing: 1 }}>● CLOCKED IN</div>}
+          {active && <div style={{ fontSize: 11, color: accentColor, fontFamily: "'DM Mono', monospace", letterSpacing: 1 }}>● CLOCKED IN</div>}
         </div>
-        <button onClick={signOut} style={{ ...ib, color: '#aaa' }}><Icon name="logout" size={18} /></button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <button onClick={() => setShowSettings(true)} style={{ ...ib, color: '#aaa' }} aria-label="Settings"><Icon name="cog" size={18} /></button>
+          <button onClick={signOut} style={{ ...ib, color: '#aaa' }} aria-label="Sign out"><Icon name="logout" size={18} /></button>
+        </div>
       </div>
 
       {loading ? loadingState : loadError ? errorState : tabContent}
@@ -577,12 +604,14 @@ export default function App() {
       <div style={{ position: 'fixed', bottom: 0, left: '50%', transform: 'translateX(-50%)', width: '100%', maxWidth: 430, background: '#fff', borderTop: '1px solid #e8e8e8', display: 'flex', padding: '8px 0 12px' }}>
         {TABS.map(t => (
           <button key={t.id} onClick={() => setTab(t.id)}
-            style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, background: 'transparent', border: 'none', cursor: 'pointer', padding: '6px 0', color: tab === t.id ? '#E8651A' : '#aaa' }}>
+            style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, background: 'transparent', border: 'none', cursor: 'pointer', padding: '6px 0', color: tab === t.id ? accentColor : '#aaa' }}>
             <Icon name={t.i} size={19} />
             <span style={{ fontSize: 9, fontFamily: "'DM Mono', monospace", letterSpacing: 0.5 }}>{t.l}</span>
           </button>
         ))}
       </div>
+      {settingsModal}
     </div>
+    </AccentColorContext.Provider>
   );
 }
