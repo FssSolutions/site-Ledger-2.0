@@ -4,8 +4,10 @@ import Icon from '../components/Icon.jsx';
 import { card, ib } from '../styles.js';
 import { MN } from '../lib/constants.js';
 import { fmtDur, fmtCAD, calcEarnings, calcDur, dayKey, calcOvertime } from '../lib/utils.js';
+import { useAccentColor } from '../lib/AccentColorContext.js';
 
 export default function CalendarTab({ jobs, employees, sessions, onSave, onDelete, busy, isDesktop }) {
+  const accent = useAccentColor();
   const [vd, setVd] = useState(new Date());
   const [sel, setSel] = useState(null);
   const [modal, setModal] = useState(null);
@@ -65,8 +67,8 @@ export default function CalendarTab({ jobs, employees, sessions, onSave, onDelet
           const hasOT = dayOT && dayOT.overtime > 0;
           return (
             <button key={d} onClick={() => setSel(isSel ? null : d)}
-              style={{ aspectRatio: '1', borderRadius: 10, border: isSel ? '1.5px solid #E8651A' : hasOT ? '1.5px solid #E67E22' : isTd ? '1.5px solid #ccc' : '1.5px solid transparent', background: isSel ? '#E8651A22' : hasOT ? '#FEF5E7' : isTd ? '#f0f0f0' : 'transparent', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2, padding: 4 }}>
-              <span style={{ color: hasOT ? '#E67E22' : isTd ? '#E8651A' : ds.length ? '#111' : '#bbb', fontSize: 13, fontWeight: isTd || hasOT ? 700 : 400 }}>{d}</span>
+              style={{ aspectRatio: '1', borderRadius: 10, border: isSel ? `1.5px solid ${accent}` : hasOT ? '1.5px solid #E67E22' : isTd ? '1.5px solid #ccc' : '1.5px solid transparent', background: isSel ? `${accent}22` : hasOT ? '#FEF5E7' : isTd ? '#f0f0f0' : 'transparent', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2, padding: 4 }}>
+              <span style={{ color: hasOT ? '#E67E22' : isTd ? accent : ds.length ? '#111' : '#bbb', fontSize: 13, fontWeight: isTd || hasOT ? 700 : 400 }}>{d}</span>
               {cols.length > 0 && (
                 <div style={{ display: 'flex', gap: 2 }}>
                   {cols.slice(0, 3).map((c, ci) => <div key={ci} style={{ width: 5, height: 5, borderRadius: '50%', background: c }} />)}
@@ -94,13 +96,13 @@ export default function CalendarTab({ jobs, employees, sessions, onSave, onDelet
                 </div>
               )}
             </div>
-            <button onClick={() => setModal('add')} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 10, border: 'none', background: '#E8651A', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+            <button onClick={() => setModal('add')} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 10, border: 'none', background: accent, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
               <Icon name="plus" size={14} /> Add
             </button>
           </div>
           {ss.length === 0 ? (
             <div style={{ color: '#bbb', fontSize: 13, textAlign: 'center', padding: '20px 0' }}>
-              No entries. <span onClick={() => setModal('add')} style={{ color: '#E8651A', cursor: 'pointer', textDecoration: 'underline' }}>Add one.</span>
+              No entries. <span onClick={() => setModal('add')} style={{ color: accent, cursor: 'pointer', textDecoration: 'underline' }}>Add one.</span>
             </div>
           ) : ss.map(s => {
             const j = jobs.find(x => x.id === s.job_id);

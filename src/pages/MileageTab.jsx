@@ -3,8 +3,10 @@ import Icon from '../components/Icon.jsx';
 import { card, ib, inp, lbl } from '../styles.js';
 import { CRA_RATE } from '../lib/constants.js';
 import { fmtCAD, todayStr } from '../lib/utils.js';
+import { useAccentColor } from '../lib/AccentColorContext.js';
 
 export default function MileageTab({ jobs, mileage, onAdd, onDelete, busy, isDesktop }) {
+  const accent = useAccentColor();
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState({ jobId: jobs[0]?.id || '', date: todayStr(), km: '', note: '' });
 
@@ -39,7 +41,7 @@ export default function MileageTab({ jobs, mileage, onAdd, onDelete, busy, isDes
         </div>
         <div style={{ ...card, padding: '16px 18px' }}>
           <div style={{ color: '#999', fontSize: 11, fontFamily: "'DM Mono', monospace", letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 6 }}>CRA Deduction</div>
-          <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Syne', sans-serif", color: '#E8651A' }}>{fmtCAD(totalDeduct)}</div>
+          <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Syne', sans-serif", color: accent }}>{fmtCAD(totalDeduct)}</div>
         </div>
       </div>
       <div style={{ padding: '4px 16px 0' }}>
@@ -65,13 +67,13 @@ export default function MileageTab({ jobs, mileage, onAdd, onDelete, busy, isDes
             <div><label style={lbl}>Distance (km)</label><input type="number" value={form.km} onChange={e => setForm({ ...form, km: e.target.value })} placeholder="e.g. 42" style={inp} /></div>
             <div><label style={lbl}>Note (optional)</label><input type="text" value={form.note} onChange={e => setForm({ ...form, note: e.target.value })} placeholder="e.g. Site A to hardware store" style={inp} /></div>
             {form.km && (
-              <div style={{ background: '#E8651A15', border: '1px solid #E8651A33', borderRadius: 10, padding: '10px 14px', display: 'flex', justifyContent: 'space-between' }}>
+              <div style={{ background: `${accent}15`, border: `1px solid ${accent}33`, borderRadius: 10, padding: '10px 14px', display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ color: '#888', fontSize: 13 }}>{form.km} km</span>
-                <span style={{ color: '#E8651A', fontWeight: 700, fontSize: 13 }}>{fmtCAD(form.km * CRA_RATE)} deduction</span>
+                <span style={{ color: accent, fontWeight: 700, fontSize: 13 }}>{fmtCAD(form.km * CRA_RATE)} deduction</span>
               </div>
             )}
             <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={submit} style={{ flex: 1, padding: '12px', borderRadius: 10, border: 'none', background: '#E8651A', color: '#fff', fontWeight: 700, cursor: 'pointer' }}>Save Trip</button>
+              <button onClick={submit} style={{ flex: 1, padding: '12px', borderRadius: 10, border: 'none', background: accent, color: '#fff', fontWeight: 700, cursor: 'pointer' }}>Save Trip</button>
               <button onClick={() => setShowAdd(false)} style={{ padding: '12px 16px', borderRadius: 10, border: '1px solid #e0e0e0', background: 'transparent', color: '#888', cursor: 'pointer' }}>Cancel</button>
             </div>
           </div>

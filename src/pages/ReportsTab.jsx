@@ -4,8 +4,10 @@ import InvoiceModal from '../components/InvoiceModal.jsx';
 import { card, inp } from '../styles.js';
 import { CRA_RATE } from '../lib/constants.js';
 import { fmtDur, fmtCAD, calcEarnings, calcDur, calcOvertime } from '../lib/utils.js';
+import { useAccentColor } from '../lib/AccentColorContext.js';
 
 export default function ReportsTab({ jobs, employees, sessions, mileage, company, customers, taxRate, isDesktop }) {
+  const accent = useAccentColor();
   const [pre, setPre] = useState('month');
   const [cs, setCs] = useState('');
   const [ce, setCe] = useState('');
@@ -72,7 +74,7 @@ export default function ReportsTab({ jobs, employees, sessions, mileage, company
       <div style={{ display: 'flex', gap: 6, padding: '16px 16px 0', flexWrap: 'wrap' }}>
         {[{ id: 'week', l: '7 Days' }, { id: 'month', l: 'This Month' }, { id: 'lastmonth', l: 'Last Month' }, { id: 'year', l: 'This Year' }, { id: 'custom', l: 'Custom' }].map(p => (
           <button key={p.id} onClick={() => setPre(p.id)}
-            style={{ padding: '8px 14px', borderRadius: 20, border: pre === p.id ? 'none' : '1px solid #e0e0e0', background: pre === p.id ? '#E8651A' : '#fff', color: pre === p.id ? '#fff' : '#888', fontSize: 13, fontWeight: pre === p.id ? 700 : 400, cursor: 'pointer' }}>
+            style={{ padding: '8px 14px', borderRadius: 20, border: pre === p.id ? 'none' : '1px solid #e0e0e0', background: pre === p.id ? accent : '#fff', color: pre === p.id ? '#fff' : '#888', fontSize: 13, fontWeight: pre === p.id ? 700 : 400, cursor: 'pointer' }}>
             {p.l}
           </button>
         ))}
@@ -86,7 +88,7 @@ export default function ReportsTab({ jobs, employees, sessions, mileage, company
       )}
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, padding: '12px 16px 0' }}>
-        <div style={{ ...card, padding: '16px 18px' }}><div style={{ color: '#999', fontSize: 11, fontFamily: "'DM Mono', monospace", letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 6 }}>Earned</div><div style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Syne', sans-serif", color: '#E8651A' }}>{fmtCAD(te)}</div></div>
+        <div style={{ ...card, padding: '16px 18px' }}><div style={{ color: '#999', fontSize: 11, fontFamily: "'DM Mono', monospace", letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 6 }}>Earned</div><div style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Syne', sans-serif", color: accent }}>{fmtCAD(te)}</div></div>
         <div style={{ ...card, padding: '16px 18px' }}><div style={{ color: '#999', fontSize: 11, fontFamily: "'DM Mono', monospace", letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 6 }}>Hours</div><div style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Syne', sans-serif", color: '#111' }}>{fmtDur(tm)}</div></div>
         <div style={{ ...card, padding: '16px 18px' }}><div style={{ color: '#999', fontSize: 11, fontFamily: "'DM Mono', monospace", letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 6 }}>Mileage</div><div style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Syne', sans-serif", color: '#111' }}>{totalKm.toFixed(0)} km</div></div>
         <div style={{ ...card, padding: '16px 18px' }}><div style={{ color: '#999', fontSize: 11, fontFamily: "'DM Mono', monospace", letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 6 }}>KM Deduction</div><div style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Syne', sans-serif", color: '#3BB273' }}>{fmtCAD(totalKm * CRA_RATE)}</div></div>
@@ -194,7 +196,7 @@ export default function ReportsTab({ jobs, employees, sessions, mileage, company
       {f.length > 0 && (
         <div style={{ padding: '16px 16px 0', display: 'flex', flexDirection: 'column', gap: 8 }}>
           <button onClick={() => setShowInvoice(true)}
-            style={{ width: '100%', padding: '14px', borderRadius: 12, border: 'none', background: '#E8651A', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontFamily: "'Syne', sans-serif" }}>
+            style={{ width: '100%', padding: '14px', borderRadius: 12, border: 'none', background: accent, color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontFamily: "'Syne', sans-serif" }}>
             <Icon name="dl" size={16} /> Generate Invoice (PDF)
           </button>
           <button onClick={exportCSV} style={{ width: '100%', padding: '12px', borderRadius: 12, border: '1px solid #e0e0e0', background: '#fff', color: '#888', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>

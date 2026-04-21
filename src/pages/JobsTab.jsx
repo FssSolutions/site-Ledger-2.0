@@ -3,6 +3,7 @@ import Icon from '../components/Icon.jsx';
 import { card, ib, inp, lbl } from '../styles.js';
 import { JOB_COLORS } from '../lib/constants.js';
 import { fmtCAD } from '../lib/utils.js';
+import { useAccentColor } from '../lib/AccentColorContext.js';
 
 function Swatches({ ci, setCi }) {
   return (
@@ -16,6 +17,7 @@ function Swatches({ ci, setCi }) {
 }
 
 export default function JobsTab({ jobs, onAdd, onUpdate, onDelete, isDesktop }) {
+  const accent = useAccentColor();
   const [showAdd, setShowAdd] = useState(false);
   const [editId, setEditId] = useState(null);
   const [form, setForm] = useState({ name: '', rate: '', notes: '' });
@@ -34,7 +36,7 @@ export default function JobsTab({ jobs, onAdd, onUpdate, onDelete, isDesktop }) 
                 <Swatches ci={ci} setCi={setCi} />
                 <div style={{ display: 'flex', gap: 8 }}>
                   <button onClick={() => { onUpdate({ ...job, name: form.name, rate: parseFloat(form.rate), color: JOB_COLORS[ci % JOB_COLORS.length], notes: form.notes }); setEditId(null); }}
-                    style={{ flex: 1, padding: '10px', borderRadius: 8, border: 'none', background: '#E8651A', color: '#fff', fontWeight: 700, cursor: 'pointer' }}>Save</button>
+                    style={{ flex: 1, padding: '10px', borderRadius: 8, border: 'none', background: accent, color: '#fff', fontWeight: 700, cursor: 'pointer' }}>Save</button>
                   <button onClick={() => setEditId(null)} style={{ padding: '10px 14px', borderRadius: 8, border: '1px solid #e0e0e0', background: 'transparent', color: '#888', cursor: 'pointer' }}>Cancel</button>
                 </div>
               </div>
@@ -63,7 +65,7 @@ export default function JobsTab({ jobs, onAdd, onUpdate, onDelete, isDesktop }) 
               <Swatches ci={ci} setCi={setCi} />
               <div style={{ display: 'flex', gap: 8 }}>
                 <button onClick={() => { if (!form.name || !form.rate) return; onAdd({ name: form.name, rate: parseFloat(form.rate), color: JOB_COLORS[ci % JOB_COLORS.length], notes: form.notes }); setForm({ name: '', rate: '', notes: '' }); setShowAdd(false); }}
-                  style={{ flex: 1, padding: '10px', borderRadius: 8, border: 'none', background: '#E8651A', color: '#fff', fontWeight: 700, cursor: 'pointer' }}>Add Job</button>
+                  style={{ flex: 1, padding: '10px', borderRadius: 8, border: 'none', background: accent, color: '#fff', fontWeight: 700, cursor: 'pointer' }}>Add Job</button>
                 <button onClick={() => setShowAdd(false)} style={{ padding: '10px 14px', borderRadius: 8, border: '1px solid #e0e0e0', background: 'transparent', color: '#888', cursor: 'pointer' }}>Cancel</button>
               </div>
             </div>

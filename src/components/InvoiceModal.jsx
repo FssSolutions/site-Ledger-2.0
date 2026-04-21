@@ -94,10 +94,10 @@ export default function InvoiceModal({ sessions, jobs, employees, customers, dat
               const isSelected = selectedJobIds.includes(j.id);
               return (
                 <button key={j.id} onClick={() => toggleJob(j.id)}
-                  style={{ ...card, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', border: isSelected ? '2px solid #E8651A' : '1px solid #e8e8e8', background: isSelected ? '#FEF5E7' : '#fff' }}>
+                  style={{ ...card, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', border: isSelected ? `2px solid ${accent}` : '1px solid #e8e8e8', background: isSelected ? `${accent}18` : '#fff' }}>
                   <div style={{ width: 10, height: 10, borderRadius: '50%', background: j.color, flexShrink: 0 }} />
                   <span style={{ color: '#333', fontSize: 13, flex: 1, textAlign: 'left' }}>{j.name}</span>
-                  {isSelected && <span style={{ color: '#E8651A', fontSize: 16, fontWeight: 700 }}>&#10003;</span>}
+                  {isSelected && <span style={{ color: accent, fontSize: 16, fontWeight: 700 }}>&#10003;</span>}
                 </button>
               );
             })}
@@ -115,7 +115,7 @@ export default function InvoiceModal({ sessions, jobs, employees, customers, dat
       )}
 
       <button onClick={handleGenerate}
-        style={{ width: '100%', padding: '14px', borderRadius: 12, border: 'none', background: done ? '#3BB273' : '#E8651A', color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: "'Syne', sans-serif" }}>
+        style={{ width: '100%', padding: '14px', borderRadius: 12, border: 'none', background: done ? '#3BB273' : accent, color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: "'Syne', sans-serif" }}>
         {done ? 'Downloaded!' : 'Generate PDF'}
       </button>
     </Modal>

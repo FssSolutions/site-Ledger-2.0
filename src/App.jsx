@@ -506,7 +506,7 @@ export default function App() {
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '80px 24px', textAlign: 'center' }}>
       <div style={{ color: '#c0392b', fontSize: 16, fontWeight: 600, marginBottom: 8 }}>Something went wrong</div>
       <div style={{ color: '#999', fontSize: 14, marginBottom: 20 }}>Could not load your data. This could be a network issue or the server may be temporarily unavailable.</div>
-      <button onClick={loadData} style={{ padding: '12px 28px', borderRadius: 10, border: 'none', background: '#E8651A', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>Try Again</button>
+      <button onClick={loadData} style={{ padding: '12px 28px', borderRadius: 10, border: 'none', background: accentColor, color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>Try Again</button>
     </div>
   );
 
@@ -547,7 +547,7 @@ export default function App() {
           <div style={{ flex: 1, padding: '12px 12px 0', display: 'flex', flexDirection: 'column', gap: 2, overflowY: 'auto' }}>
             {TABS.map(t => (
               <button key={t.id} onClick={() => setTab(t.id)}
-                style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 12px', borderRadius: 10, border: 'none', background: tab === t.id ? '#E8651A18' : 'transparent', color: tab === t.id ? '#E8651A' : '#555', fontSize: 14, fontWeight: tab === t.id ? 700 : 400, cursor: 'pointer', textAlign: 'left', width: '100%', fontFamily: "'DM Sans', sans-serif" }}>
+                style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 12px', borderRadius: 10, border: 'none', background: tab === t.id ? `${accentColor}18` : 'transparent', color: tab === t.id ? accentColor : '#555', fontSize: 14, fontWeight: tab === t.id ? 700 : 400, cursor: 'pointer', textAlign: 'left', width: '100%', fontFamily: "'DM Sans', sans-serif" }}>
                 <Icon name={t.i} size={17} />
                 {t.l}
               </button>

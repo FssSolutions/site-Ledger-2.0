@@ -2,8 +2,10 @@ import { useState, useRef } from 'react';
 import Icon from '../components/Icon.jsx';
 import { card, ib, inp, lbl } from '../styles.js';
 import { fmtCAD } from '../lib/utils.js';
+import { useAccentColor } from '../lib/AccentColorContext.js';
 
 export default function CompanyTab({ employees, onAddEmp, onUpdateEmp, onDeleteEmp, customers, onAddCust, onUpdateCust, onDeleteCust, company, onUpdateCompany, isDesktop }) {
+  const accent = useAccentColor();
   const [view, setView] = useState('crew');
 
   // --- Crew state ---
@@ -41,7 +43,7 @@ export default function CompanyTab({ employees, onAddEmp, onUpdateEmp, onDeleteE
       <div style={{ display: 'flex', background: '#eee', borderRadius: 12, padding: 4, margin: '16px 16px 0', border: '1px solid #e0e0e0' }}>
         {[['crew', 'Crew'], ['customers', 'Customers'], ['profile', 'Profile']].map(([v, l]) => (
           <button key={v} onClick={() => setView(v)}
-            style={{ flex: 1, padding: '9px', borderRadius: 9, border: 'none', background: view === v ? '#E8651A' : 'transparent', color: view === v ? '#fff' : '#888', fontWeight: view === v ? 700 : 400, cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+            style={{ flex: 1, padding: '9px', borderRadius: 9, border: 'none', background: view === v ? accent : 'transparent', color: view === v ? '#fff' : '#888', fontWeight: view === v ? 700 : 400, cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
             <Icon name={v === 'crew' ? 'users' : v === 'customers' ? 'user' : 'cog'} size={14} />{l}
           </button>
         ))}
@@ -59,7 +61,7 @@ export default function CompanyTab({ employees, onAddEmp, onUpdateEmp, onDeleteE
                   <input type="number" value={empForm.rate} onChange={e => setEmpForm({ ...empForm, rate: e.target.value })} placeholder="Hourly rate (CAD)" style={inp} />
                   <div style={{ display: 'flex', gap: 8 }}>
                     <button onClick={() => { onUpdateEmp({ ...emp, name: empForm.name, rate: parseFloat(empForm.rate) }); setEditEmpId(null); }}
-                      style={{ flex: 1, padding: '10px', borderRadius: 8, border: 'none', background: '#E8651A', color: '#fff', fontWeight: 700, cursor: 'pointer' }}>Save</button>
+                      style={{ flex: 1, padding: '10px', borderRadius: 8, border: 'none', background: accent, color: '#fff', fontWeight: 700, cursor: 'pointer' }}>Save</button>
                     <button onClick={() => setEditEmpId(null)} style={{ padding: '10px 14px', borderRadius: 8, border: '1px solid #e0e0e0', background: 'transparent', color: '#888', cursor: 'pointer' }}>Cancel</button>
                   </div>
                 </div>
@@ -83,7 +85,7 @@ export default function CompanyTab({ employees, onAddEmp, onUpdateEmp, onDeleteE
                 <input type="number" value={empForm.rate} onChange={e => setEmpForm({ ...empForm, rate: e.target.value })} placeholder="Hourly rate (CAD)" style={inp} />
                 <div style={{ display: 'flex', gap: 8 }}>
                   <button onClick={() => { if (!empForm.name || !empForm.rate) return; onAddEmp({ name: empForm.name, rate: parseFloat(empForm.rate) }); setEmpForm({ name: '', rate: '' }); setShowAddEmp(false); }}
-                    style={{ flex: 1, padding: '10px', borderRadius: 8, border: 'none', background: '#E8651A', color: '#fff', fontWeight: 700, cursor: 'pointer' }}>Add</button>
+                    style={{ flex: 1, padding: '10px', borderRadius: 8, border: 'none', background: accent, color: '#fff', fontWeight: 700, cursor: 'pointer' }}>Add</button>
                   <button onClick={() => setShowAddEmp(false)} style={{ padding: '10px 14px', borderRadius: 8, border: '1px solid #e0e0e0', background: 'transparent', color: '#888', cursor: 'pointer' }}>Cancel</button>
                 </div>
               </div>
@@ -111,7 +113,7 @@ export default function CompanyTab({ employees, onAddEmp, onUpdateEmp, onDeleteE
                   <input value={custForm.address} onChange={e => setCustForm({ ...custForm, address: e.target.value })} placeholder="Address" style={inp} />
                   <div style={{ display: 'flex', gap: 8 }}>
                     <button onClick={() => { if (!custForm.name) return; onUpdateCust({ ...cust, ...custForm }); setEditCustId(null); }}
-                      style={{ flex: 1, padding: '10px', borderRadius: 8, border: 'none', background: '#E8651A', color: '#fff', fontWeight: 700, cursor: 'pointer' }}>Save</button>
+                      style={{ flex: 1, padding: '10px', borderRadius: 8, border: 'none', background: accent, color: '#fff', fontWeight: 700, cursor: 'pointer' }}>Save</button>
                     <button onClick={() => setEditCustId(null)} style={{ padding: '10px 14px', borderRadius: 8, border: '1px solid #e0e0e0', background: 'transparent', color: '#888', cursor: 'pointer' }}>Cancel</button>
                   </div>
                 </div>
@@ -139,7 +141,7 @@ export default function CompanyTab({ employees, onAddEmp, onUpdateEmp, onDeleteE
                 <input value={custForm.address} onChange={e => setCustForm({ ...custForm, address: e.target.value })} placeholder="Address" style={inp} />
                 <div style={{ display: 'flex', gap: 8 }}>
                   <button onClick={() => { if (!custForm.name) return; onAddCust({ name: custForm.name, phone: custForm.phone, email: custForm.email, address: custForm.address }); setCustForm({ name: '', phone: '', email: '', address: '' }); setShowAddCust(false); }}
-                    style={{ flex: 1, padding: '10px', borderRadius: 8, border: 'none', background: '#E8651A', color: '#fff', fontWeight: 700, cursor: 'pointer' }}>Add</button>
+                    style={{ flex: 1, padding: '10px', borderRadius: 8, border: 'none', background: accent, color: '#fff', fontWeight: 700, cursor: 'pointer' }}>Add</button>
                   <button onClick={() => setShowAddCust(false)} style={{ padding: '10px 14px', borderRadius: 8, border: '1px solid #e0e0e0', background: 'transparent', color: '#888', cursor: 'pointer' }}>Cancel</button>
                 </div>
               </div>
@@ -215,7 +217,7 @@ export default function CompanyTab({ employees, onAddEmp, onUpdateEmp, onDeleteE
               </div>
 
               <button onClick={saveCompany}
-                style={{ width: '100%', padding: '14px', borderRadius: 12, border: 'none', background: compSaved ? '#3BB273' : '#E8651A', color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: "'Syne', sans-serif", marginTop: 4 }}>
+                style={{ width: '100%', padding: '14px', borderRadius: 12, border: 'none', background: compSaved ? '#3BB273' : accent, color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: "'Syne', sans-serif", marginTop: 4 }}>
                 {compSaved ? 'Saved!' : 'Save Company Info'}
               </button>
             </div>

@@ -4,8 +4,10 @@ import Icon from './Icon.jsx';
 import { inp, lbl } from '../styles.js';
 import { MN } from '../lib/constants.js';
 import { fmtDur, fmtCAD, dayKey, todayStr } from '../lib/utils.js';
+import { useAccentColor } from '../lib/AccentColorContext.js';
 
 export default function SessionModal({ session, date, jobs, employees, onSave, onClose, busy }) {
+  const accent = useAccentColor();
   const isEdit = !!session;
   const defaultDate = date
     ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
@@ -78,7 +80,7 @@ export default function SessionModal({ session, date, jobs, employees, onSave, o
         <button
           onClick={() => { if (valid && form.jobId) onSave({ ...session, job_id: form.jobId, employee_id: form.empId || null, start_time: startDt.toISOString(), end_time: endDt.toISOString() }); }}
           disabled={!valid || busy}
-          style={{ width: '100%', padding: '15px', borderRadius: 12, border: 'none', background: valid ? job?.color || '#E8651A' : '#e8e8e8', color: valid ? '#fff' : '#aaa', fontSize: 16, fontWeight: 700, fontFamily: "'Syne', sans-serif", cursor: valid ? 'pointer' : 'not-allowed', opacity: busy ? 0.6 : 1, marginTop: 4 }}>
+          style={{ width: '100%', padding: '15px', borderRadius: 12, border: 'none', background: valid ? job?.color || accent : '#e8e8e8', color: valid ? '#fff' : '#aaa', fontSize: 16, fontWeight: 700, fontFamily: "'Syne', sans-serif", cursor: valid ? 'pointer' : 'not-allowed', opacity: busy ? 0.6 : 1, marginTop: 4 }}>
           {busy ? 'Saving...' : (isEdit ? 'Save Changes' : 'Save Entry')}
         </button>
       </div>

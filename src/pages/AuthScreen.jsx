@@ -58,7 +58,7 @@ export default function AuthScreen({ onAuth }) {
         <div style={{ display: 'flex', background: '#eeeeee', borderRadius: 12, padding: 4, marginBottom: 24, border: '1px solid #e0e0e0' }}>
           {[['signup', 'Create Account'], ['signin', 'Sign In']].map(([m, l]) => (
             <button key={m} onClick={() => switchMode(m)}
-              style={{ flex: 1, padding: '10px', borderRadius: 9, border: 'none', background: mode === m ? '#E8651A' : 'transparent', color: mode === m ? '#fff' : '#888', fontWeight: mode === m ? 700 : 400, cursor: 'pointer', fontSize: 14 }}>
+              style={{ flex: 1, padding: '10px', borderRadius: 9, border: 'none', background: mode === m ? accent : 'transparent', color: mode === m ? '#fff' : '#888', fontWeight: mode === m ? 700 : 400, cursor: 'pointer', fontSize: 14 }}>
               {l}
             </button>
           ))}
@@ -86,18 +86,18 @@ export default function AuthScreen({ onAuth }) {
         {err && <div style={{ background: '#fde8e8', border: '1px solid #f5c6c6', borderRadius: 10, padding: '12px 14px', color: '#c0392b', fontSize: 13, lineHeight: 1.5 }}>{err}</div>}
         {msg && <div style={{ background: '#e8f8ee', border: '1px solid #b7e4c7', borderRadius: 10, padding: '12px 14px', color: '#27ae60', fontSize: 13 }}>{msg}</div>}
         <button onClick={submit} disabled={busy}
-          style={{ padding: '15px', borderRadius: 12, border: 'none', background: busy ? '#ccc' : '#E8651A', color: '#fff', fontSize: 16, fontWeight: 700, fontFamily: "'Syne', sans-serif", cursor: busy ? 'not-allowed' : 'pointer', marginTop: 4 }}>
+          style={{ padding: '15px', borderRadius: 12, border: 'none', background: busy ? '#ccc' : accent, color: '#fff', fontSize: 16, fontWeight: 700, fontFamily: "'Syne', sans-serif", cursor: busy ? 'not-allowed' : 'pointer', marginTop: 4 }}>
           {busy ? 'Please wait...' : mode === 'signup' ? 'Create Account' : mode === 'signin' ? 'Sign In' : 'Send Reset Link'}
         </button>
         {mode === 'signin' && (
           <button onClick={() => switchMode('forgot')}
-            style={{ background: 'none', border: 'none', color: '#E8651A', fontSize: 13, cursor: 'pointer', padding: 0 }}>
+            style={{ background: 'none', border: 'none', color: accent, fontSize: 13, cursor: 'pointer', padding: 0 }}>
             Forgot your password?
           </button>
         )}
         {mode === 'forgot' && (
           <button onClick={() => switchMode('signin')}
-            style={{ background: 'none', border: 'none', color: '#E8651A', fontSize: 13, cursor: 'pointer', padding: 0 }}>
+            style={{ background: 'none', border: 'none', color: accent, fontSize: 13, cursor: 'pointer', padding: 0 }}>
             Back to Sign In
           </button>
         )}
