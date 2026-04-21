@@ -7,16 +7,19 @@ import { useAccentColor } from '../lib/AccentColorContext.js';
 
 export default function MileageTab({ jobs, mileage, onAdd, onDelete, busy, isDesktop }) {
   const accent = useAccentColor();
+  const activeJobs = jobs.filter(j => (j.status || 'active') === 'active');
   const [showAdd, setShowAdd] = useState(false);
-  const [form, setForm] = useState({ jobId: jobs[0]?.id || '', date: todayStr(), km: '', note: '' });
+  const [form, setForm] = useState({ jobId: activeJobs[0]?.id || '', date: todayStr(), km: '', note: '', roundTrip: false });
 
   const totalKm = mileage.reduce((s, x) => s + Number(x.km), 0);
   const totalDeduct = totalKm * CRA_RATE;
 
+  const previewKm = form.roundTrip ? parseFloat(form.km || 0) * 2 : parseFloat(form.km || 0);
+
   function submit() {
     if (!form.km || !form.jobId) return;
-    onAdd({ job_id: form.jobId, date: form.date, km: parseFloat(form.km), note: form.note });
-    setForm({ jobId: jobs[0]?.id || '', date: todayStr(), km: '', note: '' });
+    onAdd({ job_id: form.jobId, date: form.date, km: previewKm, note: form.note });
+    setForm({ jobId: activeJobs[0]?.id || '', date: todayStr(), km: '', note: '', roundTrip: false });
     setShowAdd(false);
   }
 
@@ -45,7 +48,7 @@ export default function MileageTab({ jobs, mileage, onAdd, onDelete, busy, isDes
         </div>
       </div>
       <div style={{ padding: '4px 16px 0' }}>
-        <div style={{ color: '#bbb', fontSize: 11, textAlign: 'right' }}>@ ${CRA_RATE}/km (CRA 2024 rate)</div>
+        <div style={{ color: '#bbb', fontSize: 11, textAlign: 'right' }}>@ ${CRA_RATE}/km (CRA rate)</div>
       </div>
 
       <div style={{ margin: '12px 16px 0' }}>
@@ -60,16 +63,27 @@ export default function MileageTab({ jobs, mileage, onAdd, onDelete, busy, isDes
             <div>
               <label style={lbl}>Job</label>
               <select value={form.jobId} onChange={e => setForm({ ...form, jobId: e.target.value })} style={inp}>
-                {jobs.map(j => <option key={j.id} value={j.id}>{j.name}</option>)}
+                {activeJobs.map(j => <option key={j.id} value={j.id}>{j.name}</option>)}
               </select>
             </div>
             <div><label style={lbl}>Date</label><input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} style={inp} /></div>
-            <div><label style={lbl}>Distance (km)</label><input type="number" value={form.km} onChange={e => setForm({ ...form, km: e.target.value })} placeholder="e.g. 42" style={inp} /></div>
+            <div><label style={lbl}>One-way distance (km)</label><input type="number" value={form.km} onChange={e => setForm({ ...form, km: e.target.value })} placeholder="e.g. 42" style={inp} /></div>
+
+            {/* Round trip toggle */}
+            <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', userSelect: 'none' }}>
+              <div onClick={() => setForm({ ...form, roundTrip: !form.roundTrip })}
+                style={{ width: 40, height: 22, borderRadius: 11, background: form.roundTrip ? accent : '#ddd', position: 'relative', transition: 'background 0.2s', flexShrink: 0 }}>
+                <div style={{ position: 'absolute', top: 3, left: form.roundTrip ? 21 : 3, width: 16, height: 16, borderRadius: '50%', background: '#fff', transition: 'left 0.2s' }} />
+              </div>
+              <span style={{ fontSize: 13, color: '#555' }}>Round trip <span style={{ color: '#aaa' }}>(doubles km)</span></span>
+            </label>
+
             <div><label style={lbl}>Note (optional)</label><input type="text" value={form.note} onChange={e => setForm({ ...form, note: e.target.value })} placeholder="e.g. Site A to hardware store" style={inp} /></div>
+
             {form.km && (
               <div style={{ background: `${accent}15`, border: `1px solid ${accent}33`, borderRadius: 10, padding: '10px 14px', display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: '#888', fontSize: 13 }}>{form.km} km</span>
-                <span style={{ color: accent, fontWeight: 700, fontSize: 13 }}>{fmtCAD(form.km * CRA_RATE)} deduction</span>
+                <span style={{ color: '#888', fontSize: 13 }}>{previewKm} km{form.roundTrip ? ' (round trip)' : ''}</span>
+                <span style={{ color: accent, fontWeight: 700, fontSize: 13 }}>{fmtCAD(previewKm * CRA_RATE)} deduction</span>
               </div>
             )}
             <div style={{ display: 'flex', gap: 8 }}>

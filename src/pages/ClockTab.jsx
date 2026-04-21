@@ -5,13 +5,14 @@ import { card, ib, inp, lbl } from '../styles.js';
 import { fmtDur, fmtCAD, calcEarnings, calcDur } from '../lib/utils.js';
 
 export default function ClockTab({ jobs, employees, sessions, active, onIn, onOut, onSave, onDelete, busy, isDesktop }) {
-  const [selJob, setSelJob] = useState(jobs[0]?.id || '');
+  const activeJobs = jobs.filter(j => (j.status || 'active') === 'active');
+  const [selJob, setSelJob] = useState(activeJobs[0]?.id || '');
   const [selEmp, setSelEmp] = useState('');
   const [now, setNow] = useState(Date.now());
   const [editSess, setEditSess] = useState(null);
 
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
-  useEffect(() => { if (jobs.length && !selJob) setSelJob(jobs[0].id); }, [jobs]);
+  useEffect(() => { if (activeJobs.length && !selJob) setSelJob(activeJobs[0].id); }, [jobs]);
 
   const aJob = jobs.find(j => j.id === active?.job_id);
   const elapsed = active ? now - new Date(active.start_time) : 0;
@@ -66,9 +67,9 @@ export default function ClockTab({ jobs, employees, sessions, active, onIn, onOu
         {!active ? (
           <>
             <label style={lbl}>Select Job</label>
-            {jobs.length === 0 && <div style={{ color: '#aaa', fontSize: 13, padding: '8px 0 16px' }}>No jobs yet — add one in the Jobs tab.</div>}
+            {activeJobs.length === 0 && <div style={{ color: '#aaa', fontSize: 13, padding: '8px 0 16px' }}>No active jobs — add one in the Jobs tab.</div>}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: employees.length > 0 ? 12 : 16 }}>
-              {jobs.map(j => (
+              {activeJobs.map(j => (
                 <button key={j.id} onClick={() => setSelJob(j.id)}
                   style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderRadius: 10, border: selJob === j.id ? `1.5px solid ${j.color}` : '1.5px solid #e8e8e8', background: selJob === j.id ? `${j.color}15` : '#fafafa', cursor: 'pointer' }}>
                   <div style={{ width: 10, height: 10, borderRadius: '50%', background: j.color, flexShrink: 0 }} />
@@ -89,8 +90,8 @@ export default function ClockTab({ jobs, employees, sessions, active, onIn, onOu
                 </select>
               </div>
             )}
-            <button onClick={() => onIn(selJob, selEmp || null)} disabled={!selJob || busy || jobs.length === 0}
-              style={{ width: '100%', padding: '15px', borderRadius: 12, border: 'none', background: selJob && jobs.length ? jobs.find(j => j.id === selJob)?.color || '#E8651A' : '#e8e8e8', color: selJob && jobs.length ? '#fff' : '#aaa', fontSize: 16, fontWeight: 700, fontFamily: "'Syne', sans-serif", cursor: 'pointer', opacity: busy ? 0.6 : 1 }}>
+            <button onClick={() => onIn(selJob, selEmp || null)} disabled={!selJob || busy || activeJobs.length === 0}
+              style={{ width: '100%', padding: '15px', borderRadius: 12, border: 'none', background: selJob && activeJobs.length ? activeJobs.find(j => j.id === selJob)?.color || '#E8651A' : '#e8e8e8', color: selJob && activeJobs.length ? '#fff' : '#aaa', fontSize: 16, fontWeight: 700, fontFamily: "'Syne', sans-serif", cursor: 'pointer', opacity: busy ? 0.6 : 1 }}>
               {busy ? '...' : 'Clock In'}
             </button>
           </>

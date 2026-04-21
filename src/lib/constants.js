@@ -1,4 +1,4 @@
-export const CRA_RATE = 0.70;
+export const CRA_RATE = 0.72;
 
 export const JOB_COLORS = [
   "#E8651A", "#2E86AB", "#A23B72", "#F18F01", "#3BB273",

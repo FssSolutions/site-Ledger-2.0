@@ -13,6 +13,7 @@ import MileageTab from './pages/MileageTab.jsx';
 import ReportsTab from './pages/ReportsTab.jsx';
 import JobsTab from './pages/JobsTab.jsx';
 import CompanyTab from './pages/CompanyTab.jsx';
+import ExpensesTab from './pages/ExpensesTab.jsx';
 import { useWindowWidth } from './hooks/useWindowWidth.js';
 import AccentColorContext from './lib/AccentColorContext.js';
 import SettingsModal from './components/SettingsModal.jsx';
@@ -21,6 +22,7 @@ const TABS = [
   { id: 'clock', l: 'Clock', i: 'clock' },
   { id: 'calendar', l: 'Calendar', i: 'cal' },
   { id: 'mileage', l: 'Mileage', i: 'truck' },
+  { id: 'expenses', l: 'Expenses', i: 'dollar' },
   { id: 'reports', l: 'Reports', i: 'chart' },
   { id: 'jobs', l: 'Jobs', i: 'note' },
   { id: 'company', l: 'Company', i: 'building' },
@@ -52,6 +54,8 @@ export default function App() {
     try { return JSON.parse(localStorage.getItem('sl_company') || '{}'); } catch { return {}; }
   });
   const [customers, setCustomers] = useState([]);
+  const [expenses, setExpenses] = useState([]);
+  const [invoices, setInvoices] = useState([]);
   const [active, setActive] = useState(null);
   const [tab, setTab] = useState(() => localStorage.getItem('sl_default_tab') || 'clock');
   const [busy, setBusy] = useState(false);
@@ -118,9 +122,9 @@ export default function App() {
   // --- Cache data whenever it changes ---
   useEffect(() => {
     if (jobs.length || sessions.length || employees.length || mileage.length || customers.length || company?.name) {
-      cacheData({ jobs, sessions, employees, mileage, customers, active, company });
+      cacheData({ jobs, sessions, employees, mileage, customers, expenses, invoices, active, company });
     }
-  }, [jobs, sessions, employees, mileage, customers, active, company]);
+  }, [jobs, sessions, employees, mileage, customers, expenses, invoices, active, company]);
 
   // --- Load data (with offline fallback) ---
   const loadData = useCallback(async () => {
@@ -136,6 +140,8 @@ export default function App() {
         setEmployees(cached.employees || []);
         setMileage(cached.mileage || []);
         setCustomers(cached.customers || []);
+        setExpenses(cached.expenses || []);
+        setInvoices(cached.invoices || []);
         if (cached.company) setCompany(cached.company);
         setActive(cached.active || null);
         toast('Loaded from cache — you are offline.', 'info');
@@ -148,13 +154,15 @@ export default function App() {
     }
 
     try {
-      const [j, s, e, m, c, cp] = await Promise.all([
+      const [j, s, e, m, c, cp, exp, inv] = await Promise.all([
         withRefresh(t => api.select(t, 'jobs')),
         withRefresh(t => api.select(t, 'sessions')),
         withRefresh(t => api.select(t, 'employees')),
         withRefresh(t => api.select(t, 'mileage')),
         withRefresh(t => api.select(t, 'customers')),
         withRefresh(t => api.select(t, 'company_profiles')),
+        withRefresh(t => api.select(t, 'expenses')),
+        withRefresh(t => api.select(t, 'invoices')),
       ]);
       const anyFailed = [j, s, e, m, c, cp].some(x => x === null || x?._expired);
       if (anyFailed) {
@@ -163,6 +171,8 @@ export default function App() {
           setJobs(cached.jobs || []); setSessions(cached.sessions || []);
           setEmployees(cached.employees || []); setMileage(cached.mileage || []);
           setCustomers(cached.customers || []);
+          setExpenses(cached.expenses || []);
+          setInvoices(cached.invoices || []);
           if (cached.company) setCompany(cached.company);
           setActive(cached.active || null);
           toast('Could not reach server — showing cached data.');
@@ -176,6 +186,8 @@ export default function App() {
         if (Array.isArray(e)) setEmployees(e);
         if (Array.isArray(m)) setMileage(m);
         if (Array.isArray(c)) setCustomers(c);
+        if (Array.isArray(exp)) setExpenses(exp);
+        if (Array.isArray(inv)) setInvoices(inv);
         if (Array.isArray(cp) && cp[0]) {
           const mapped = companyFromDb(cp[0]);
           setCompany(mapped);
@@ -188,6 +200,8 @@ export default function App() {
         setJobs(cached.jobs || []); setSessions(cached.sessions || []);
         setEmployees(cached.employees || []); setMileage(cached.mileage || []);
         setCustomers(cached.customers || []);
+        setExpenses(cached.expenses || []);
+        setInvoices(cached.invoices || []);
         if (cached.company) setCompany(cached.company);
         setActive(cached.active || null);
         toast('Network error — showing cached data.');
@@ -378,7 +392,7 @@ export default function App() {
     } catch { toast('Network error. Could not add job.'); }
   }
   async function updateJob(job) {
-    const body = { name: job.name, rate: job.rate, color: job.color, notes: job.notes };
+    const body = { name: job.name, rate: job.rate, color: job.color, notes: job.notes, status: job.status || 'active', address: job.address || null };
     if (offlineUpdate('jobs', job.id, body, () => setJobs(p => p.map(j => j.id === job.id ? { ...j, ...body } : j)))) return;
     try {
       const r = await withRefresh(t => api.update(t, 'jobs', job.id, body));
@@ -478,11 +492,52 @@ export default function App() {
     catch { toast('Failed to delete customer.'); }
   }
 
+  async function addExpense(exp) {
+    if (offlineInsert('expenses', exp, () => setExpenses(p => [...p, { ...exp, id: 'temp-' + Date.now() }]))) return;
+    try {
+      const u = await withRefresh(t => api.user(t));
+      if (!u?.id) { toast('Failed to add expense.'); return; }
+      const r = await withRefresh(t => api.insert(t, 'expenses', { ...exp, user_id: u.id }));
+      if (Array.isArray(r) && r[0]) setExpenses(p => [...p, r[0]]);
+      else toast('Failed to add expense.');
+    } catch { toast('Network error. Could not add expense.'); }
+  }
+  async function deleteExpense(id) {
+    if (offlineDelete('expenses', id, () => setExpenses(p => p.filter(e => e.id !== id)))) return;
+    try { await withRefresh(t => api.delete(t, 'expenses', id)); setExpenses(p => p.filter(e => e.id !== id)); }
+    catch { toast('Failed to delete expense.'); }
+  }
+
+  async function addInvoice(inv) {
+    if (offlineInsert('invoices', inv, () => setInvoices(p => [...p, { ...inv, id: 'temp-' + Date.now() }]))) return;
+    try {
+      const u = await withRefresh(t => api.user(t));
+      if (!u?.id) { toast('Failed to save invoice.'); return; }
+      const r = await withRefresh(t => api.insert(t, 'invoices', { ...inv, user_id: u.id }));
+      if (Array.isArray(r) && r[0]) setInvoices(p => [...p, r[0]]);
+      else toast('Failed to save invoice.');
+    } catch { toast('Network error. Could not save invoice.'); }
+  }
+  async function updateInvoice(inv) {
+    const body = { status: inv.status };
+    if (offlineUpdate('invoices', inv.id, body, () => setInvoices(p => p.map(x => x.id === inv.id ? { ...x, ...body } : x)))) return;
+    try {
+      const r = await withRefresh(t => api.update(t, 'invoices', inv.id, body));
+      if (Array.isArray(r) && r[0]) setInvoices(p => p.map(x => x.id === inv.id ? r[0] : x));
+      else toast('Failed to update invoice.');
+    } catch { toast('Network error. Could not update invoice.'); }
+  }
+  async function deleteInvoice(id) {
+    if (offlineDelete('invoices', id, () => setInvoices(p => p.filter(x => x.id !== id)))) return;
+    try { await withRefresh(t => api.delete(t, 'invoices', id)); setInvoices(p => p.filter(x => x.id !== id)); }
+    catch { toast('Failed to delete invoice.'); }
+  }
+
   async function signOut() {
     if (token) await api.signOut(token);
     clearAuth();
     setAuthData(null);
-    setJobs([]); setSessions([]); setEmployees([]); setMileage([]); setCustomers([]); setActive(null);
+    setJobs([]); setSessions([]); setEmployees([]); setMileage([]); setCustomers([]); setExpenses([]); setInvoices([]); setActive(null);
     setCompany({});
     localStorage.removeItem('sl_company');
   }
@@ -492,9 +547,10 @@ export default function App() {
       {tab === 'clock' && <ClockTab jobs={jobs} employees={employees} sessions={sessions} active={active} onIn={clockIn} onOut={clockOut} onSave={saveSession} onDelete={deleteSession} busy={busy} isDesktop={isDesktop} />}
       {tab === 'calendar' && <CalendarTab jobs={jobs} employees={employees} sessions={sessions} onSave={saveSession} onDelete={deleteSession} busy={busy} isDesktop={isDesktop} />}
       {tab === 'mileage' && <MileageTab jobs={jobs} mileage={mileage} onAdd={addMileage} onDelete={deleteMileage} busy={busy} isDesktop={isDesktop} />}
-      {tab === 'reports' && <ReportsTab jobs={jobs} employees={employees} sessions={sessions} mileage={mileage} company={company} customers={customers} taxRate={taxRate} isDesktop={isDesktop} />}
+      {tab === 'expenses' && <ExpensesTab jobs={jobs} expenses={expenses} onAdd={addExpense} onDelete={deleteExpense} isDesktop={isDesktop} />}
+      {tab === 'reports' && <ReportsTab jobs={jobs} employees={employees} sessions={sessions} mileage={mileage} expenses={expenses} company={company} customers={customers} taxRate={taxRate} isDesktop={isDesktop} onSaveInvoice={addInvoice} />}
       {tab === 'jobs' && <JobsTab jobs={jobs} onAdd={addJob} onUpdate={updateJob} onDelete={deleteJob} isDesktop={isDesktop} />}
-      {tab === 'company' && <CompanyTab employees={employees} onAddEmp={addEmployee} onUpdateEmp={updateEmployee} onDeleteEmp={deleteEmployee} customers={customers} onAddCust={addCustomer} onUpdateCust={updateCustomer} onDeleteCust={deleteCustomer} company={company} onUpdateCompany={updateCompany} isDesktop={isDesktop} />}
+      {tab === 'company' && <CompanyTab employees={employees} onAddEmp={addEmployee} onUpdateEmp={updateEmployee} onDeleteEmp={deleteEmployee} customers={customers} onAddCust={addCustomer} onUpdateCust={updateCustomer} onDeleteCust={deleteCustomer} invoices={invoices} onUpdateInvoice={updateInvoice} onDeleteInvoice={deleteInvoice} company={company} onUpdateCompany={updateCompany} isDesktop={isDesktop} />}
     </>
   );
 

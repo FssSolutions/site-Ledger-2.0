@@ -6,7 +6,7 @@ import { CRA_RATE } from '../lib/constants.js';
 import { fmtDur, fmtCAD, calcEarnings, calcDur, calcOvertime } from '../lib/utils.js';
 import { useAccentColor } from '../lib/AccentColorContext.js';
 
-export default function ReportsTab({ jobs, employees, sessions, mileage, company, customers, taxRate, isDesktop }) {
+export default function ReportsTab({ jobs, employees, sessions, mileage, expenses, company, customers, taxRate, isDesktop, onSaveInvoice }) {
   const accent = useAccentColor();
   const [pre, setPre] = useState('month');
   const [cs, setCs] = useState('');
@@ -26,7 +26,10 @@ export default function ReportsTab({ jobs, employees, sessions, mileage, company
   const [rs, re] = range();
   const f = sessions.filter(s => { const t = new Date(s.start_time); return t >= rs && t <= re && s.end_time; });
   const fm = mileage.filter(m => { const t = new Date(m.date); return t >= rs && t <= re; });
+  const fe = (expenses || []).filter(e => { const t = new Date(e.date); return t >= rs && t <= re; });
   const te = f.reduce((s, x) => s + calcEarnings(x, jobs), 0);
+  const totalExp = fe.reduce((s, x) => s + Number(x.amount), 0);
+  const netProfit = te - totalExp;
   const tm = f.reduce((s, x) => s + calcDur(x), 0);
   const totalKm = fm.reduce((s, x) => s + Number(x.km), 0);
   const bj = jobs.map(j => { const js = f.filter(s => s.job_id === j.id); return { ...j, e: js.reduce((s, x) => s + calcEarnings(x, jobs), 0), h: js.reduce((s, x) => s + calcDur(x), 0), n: js.length }; }).filter(j => j.n > 0).sort((a, b) => b.e - a.e);
@@ -68,6 +71,7 @@ export default function ReportsTab({ jobs, employees, sessions, mileage, company
         <InvoiceModal
           sessions={f} jobs={jobs} employees={employees} customers={customers}
           dateRange={[rs, re]} company={company} taxRate={taxRate} onClose={() => setShowInvoice(false)}
+          onSaveInvoice={onSaveInvoice}
         />
       )}
 
@@ -92,6 +96,10 @@ export default function ReportsTab({ jobs, employees, sessions, mileage, company
         <div style={{ ...card, padding: '16px 18px' }}><div style={{ color: '#999', fontSize: 11, fontFamily: "'DM Mono', monospace", letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 6 }}>Hours</div><div style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Syne', sans-serif", color: '#111' }}>{fmtDur(tm)}</div></div>
         <div style={{ ...card, padding: '16px 18px' }}><div style={{ color: '#999', fontSize: 11, fontFamily: "'DM Mono', monospace", letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 6 }}>Mileage</div><div style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Syne', sans-serif", color: '#111' }}>{totalKm.toFixed(0)} km</div></div>
         <div style={{ ...card, padding: '16px 18px' }}><div style={{ color: '#999', fontSize: 11, fontFamily: "'DM Mono', monospace", letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 6 }}>KM Deduction</div><div style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Syne', sans-serif", color: '#3BB273' }}>{fmtCAD(totalKm * CRA_RATE)}</div></div>
+        {fe.length > 0 && <>
+          <div style={{ ...card, padding: '16px 18px' }}><div style={{ color: '#999', fontSize: 11, fontFamily: "'DM Mono', monospace", letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 6 }}>Expenses</div><div style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Syne', sans-serif", color: '#C0392B' }}>{fmtCAD(totalExp)}</div></div>
+          <div style={{ ...card, padding: '16px 18px' }}><div style={{ color: '#999', fontSize: 11, fontFamily: "'DM Mono', monospace", letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 6 }}>Net Profit</div><div style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Syne', sans-serif", color: netProfit >= 0 ? '#3BB273' : '#C0392B' }}>{fmtCAD(netProfit)}</div></div>
+        </>}
       </div>
 
       {/* Overtime section */}

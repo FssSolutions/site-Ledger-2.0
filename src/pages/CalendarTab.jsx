@@ -11,6 +11,7 @@ export default function CalendarTab({ jobs, employees, sessions, onSave, onDelet
   const [vd, setVd] = useState(new Date());
   const [sel, setSel] = useState(null);
   const [modal, setModal] = useState(null);
+  const [tooltip, setTooltip] = useState(null);
 
   const yr = vd.getFullYear();
   const mo = vd.getMonth();
@@ -35,6 +36,12 @@ export default function CalendarTab({ jobs, employees, sessions, onSave, onDelet
 
   return (
     <div style={{ padding: isDesktop ? '0 0 24px' : '0 0 100px' }}>
+      {tooltip && (
+        <div style={{ position: 'fixed', left: tooltip.x + 14, top: tooltip.y - 14, background: '#111', color: '#fff', borderRadius: 8, padding: '8px 12px', fontSize: 12, pointerEvents: 'none', zIndex: 1000, whiteSpace: 'nowrap', boxShadow: '0 4px 12px rgba(0,0,0,0.25)', lineHeight: 1.6 }}>
+          {tooltip.jobs.map((j, i) => <div key={i}>{j}</div>)}
+          <div style={{ color: '#aaa', marginTop: 2, fontSize: 11 }}>{fmtDur(tooltip.ms)}</div>
+        </div>
+      )}
       {modal && (
         <SessionModal
           session={modal === 'add' ? null : modal}
@@ -67,6 +74,12 @@ export default function CalendarTab({ jobs, employees, sessions, onSave, onDelet
           const hasOT = dayOT && dayOT.overtime > 0;
           return (
             <button key={d} onClick={() => setSel(isSel ? null : d)}
+              onMouseEnter={ds.length > 0 ? e => {
+                const jobNames = [...new Set(ds.map(s => jobs.find(j => j.id === s.job_id)?.name).filter(Boolean))];
+                const ms = ds.reduce((s, x) => s + calcDur(x), 0);
+                setTooltip({ x: e.clientX, y: e.clientY, jobs: jobNames, ms });
+              } : undefined}
+              onMouseLeave={ds.length > 0 ? () => setTooltip(null) : undefined}
               style={{ aspectRatio: '1', borderRadius: 10, border: isSel ? `1.5px solid ${accent}` : hasOT ? '1.5px solid #E67E22' : isTd ? '1.5px solid #ccc' : '1.5px solid transparent', background: isSel ? `${accent}22` : hasOT ? '#FEF5E7' : isTd ? '#f0f0f0' : 'transparent', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2, padding: 4 }}>
               <span style={{ color: hasOT ? '#E67E22' : isTd ? accent : ds.length ? '#111' : '#bbb', fontSize: 13, fontWeight: isTd || hasOT ? 700 : 400 }}>{d}</span>
               {cols.length > 0 && (

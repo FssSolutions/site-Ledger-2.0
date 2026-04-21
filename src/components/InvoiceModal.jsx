@@ -3,8 +3,9 @@ import { Modal, ModalHeader } from './Modal.jsx';
 import { inp, lbl, card } from '../styles.js';
 import generateInvoice from '../lib/generateInvoice.js';
 import { useAccentColor } from '../lib/AccentColorContext.js';
+import { calcEarnings } from '../lib/utils.js';
 
-export default function InvoiceModal({ sessions, jobs, employees, customers, dateRange, company, taxRate, onClose }) {
+export default function InvoiceModal({ sessions, jobs, employees, customers, dateRange, company, taxRate, onClose, onSaveInvoice }) {
   const accent = useAccentColor();
   const [selectedCustId, setSelectedCustId] = useState('');
   const [invoiceNum, setInvoiceNum] = useState(() => {
@@ -47,6 +48,22 @@ export default function InvoiceModal({ sessions, jobs, employees, customers, dat
     if (match) {
       const next = parseInt(match[1], 10) + 1;
       localStorage.setItem('sl_next_invoice_num', String(next));
+    }
+    if (onSaveInvoice) {
+      const billSessions = activeSessions.filter(s => selectedJobIds.length === 0 || selectedJobIds.includes(s.job_id));
+      const subtotal = billSessions.reduce((s, x) => s + calcEarnings(x, jobs), 0);
+      const total = subtotal + subtotal * (taxRate / 100);
+      const [rs, re] = dateRange;
+      onSaveInvoice({
+        customer_id: selectedCustId || null,
+        customer_name: selectedCustomer?.name || '',
+        amount: parseFloat(total.toFixed(2)),
+        status: 'unpaid',
+        date_generated: new Date().toISOString().slice(0, 10),
+        date_range_start: rs.toISOString().slice(0, 10),
+        date_range_end: re.toISOString().slice(0, 10),
+        notes: invoiceNum,
+      });
     }
     setDone(true);
     setTimeout(() => setDone(false), 2000);

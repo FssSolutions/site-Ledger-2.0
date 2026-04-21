@@ -4,7 +4,7 @@ import { card, ib, inp, lbl } from '../styles.js';
 import { fmtCAD } from '../lib/utils.js';
 import { useAccentColor } from '../lib/AccentColorContext.js';
 
-export default function CompanyTab({ employees, onAddEmp, onUpdateEmp, onDeleteEmp, customers, onAddCust, onUpdateCust, onDeleteCust, company, onUpdateCompany, isDesktop }) {
+export default function CompanyTab({ employees, onAddEmp, onUpdateEmp, onDeleteEmp, customers, onAddCust, onUpdateCust, onDeleteCust, invoices, onUpdateInvoice, onDeleteInvoice, company, onUpdateCompany, isDesktop }) {
   const accent = useAccentColor();
   const [view, setView] = useState('crew');
 
@@ -41,10 +41,10 @@ export default function CompanyTab({ employees, onAddEmp, onUpdateEmp, onDeleteE
   return (
     <div style={{ padding: isDesktop ? '0 0 24px' : '0 0 100px' }}>
       <div style={{ display: 'flex', background: '#eee', borderRadius: 12, padding: 4, margin: '16px 16px 0', border: '1px solid #e0e0e0' }}>
-        {[['crew', 'Crew'], ['customers', 'Customers'], ['profile', 'Profile']].map(([v, l]) => (
+        {[['crew', 'Crew', 'users'], ['customers', 'Customers', 'user'], ['invoices', 'Invoices', 'invoice'], ['profile', 'Profile', 'cog']].map(([v, l, ic]) => (
           <button key={v} onClick={() => setView(v)}
-            style={{ flex: 1, padding: '9px', borderRadius: 9, border: 'none', background: view === v ? accent : 'transparent', color: view === v ? '#fff' : '#888', fontWeight: view === v ? 700 : 400, cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-            <Icon name={v === 'crew' ? 'users' : v === 'customers' ? 'user' : 'cog'} size={14} />{l}
+            style={{ flex: 1, padding: '9px', borderRadius: 9, border: 'none', background: view === v ? accent : 'transparent', color: view === v ? '#fff' : '#888', fontWeight: view === v ? 700 : 400, cursor: 'pointer', fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
+            <Icon name={ic} size={13} />{l}
           </button>
         ))}
       </div>
@@ -152,6 +152,35 @@ export default function CompanyTab({ employees, onAddEmp, onUpdateEmp, onDeleteE
               <Icon name="plus" size={14} /> Add Customer
             </button>
           )}
+        </div>
+      )}
+
+      {/* ---- INVOICES ---- */}
+      {view === 'invoices' && (
+        <div style={{ padding: '12px 16px 0' }}>
+          {(invoices || []).length === 0 && (
+            <div style={{ color: '#bbb', fontSize: 13, textAlign: 'center', padding: '30px 0' }}>No invoices generated yet.</div>
+          )}
+          {[...(invoices || [])].reverse().map(inv => {
+            const isPaid = inv.status === 'paid';
+            return (
+              <div key={inv.id} style={{ ...card, padding: '14px 16px', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ color: '#111', fontSize: 13, fontWeight: 700 }}>{inv.notes || '—'}</div>
+                  <div style={{ color: '#aaa', fontSize: 12, marginTop: 2 }}>
+                    {inv.customer_name || 'No customer'} · {inv.date_generated}
+                  </div>
+                  <div style={{ color: '#333', fontSize: 13, fontWeight: 600, marginTop: 2 }}>{fmtCAD(Number(inv.amount))}</div>
+                </div>
+                <button
+                  onClick={() => onUpdateInvoice({ ...inv, status: isPaid ? 'unpaid' : 'paid' })}
+                  style={{ padding: '6px 12px', borderRadius: 20, border: 'none', fontSize: 11, fontWeight: 700, cursor: 'pointer', background: isPaid ? '#3BB273' : '#f0f0f0', color: isPaid ? '#fff' : '#888', flexShrink: 0 }}>
+                  {isPaid ? 'Paid' : 'Unpaid'}
+                </button>
+                <button onClick={() => { if (confirm('Delete this invoice record?')) onDeleteInvoice(inv.id); }} style={{ ...ib, color: '#e74c3c' }}><Icon name="trash" size={14} /></button>
+              </div>
+            );
+          })}
         </div>
       )}
 
