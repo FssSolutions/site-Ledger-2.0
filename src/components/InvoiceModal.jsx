@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Modal, ModalHeader } from './Modal.jsx';
 import { inp, lbl, card } from '../styles.js';
 import generateInvoice from '../lib/generateInvoice.js';
+import InvoicePreview from './InvoicePreview.jsx';
 import { useAccentColor } from '../lib/AccentColorContext.js';
 import { calcEarnings } from '../lib/utils.js';
 
@@ -14,6 +15,7 @@ export default function InvoiceModal({ sessions, jobs, employees, customers, dat
   });
   const [selectedJobIds, setSelectedJobIds] = useState([]);
   const [done, setDone] = useState(false);
+  const [step, setStep] = useState('configure'); // 'configure' | 'preview'
 
   // Jobs that have sessions in the date range
   const [rs, re] = dateRange;
@@ -69,9 +71,42 @@ export default function InvoiceModal({ sessions, jobs, employees, customers, dat
     setTimeout(() => setDone(false), 2000);
   }
 
+  if (step === 'preview') {
+    return (
+      <Modal onClose={onClose}>
+        <ModalHeader title="Invoice Preview" subtitle="Review before downloading" onClose={onClose} />
+        <InvoicePreview
+          sessions={activeSessions}
+          jobs={jobs}
+          employees={employees}
+          dateRange={dateRange}
+          company={company || {}}
+          customer={selectedCustomer}
+          invoiceNum={invoiceNum}
+          selectedJobIds={selectedJobIds.length > 0 ? selectedJobIds : null}
+          taxRate={taxRate}
+        />
+        <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+          <button
+            onClick={() => setStep('configure')}
+            style={{ flex: 1, padding: '14px', borderRadius: 12, border: `1.5px solid ${accent}`, background: '#fff', color: accent, fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: "'Syne', sans-serif" }}
+          >
+            Back
+          </button>
+          <button
+            onClick={handleGenerate}
+            style={{ flex: 2, padding: '14px', borderRadius: 12, border: 'none', background: done ? '#3BB273' : accent, color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: "'Syne', sans-serif" }}
+          >
+            {done ? 'Downloaded!' : 'Download PDF'}
+          </button>
+        </div>
+      </Modal>
+    );
+  }
+
   return (
     <Modal onClose={onClose}>
-      <ModalHeader title="Generate Invoice" subtitle="PDF will download to your device" onClose={onClose} />
+      <ModalHeader title="Generate Invoice" subtitle="Preview before downloading" onClose={onClose} />
 
       <div style={{ marginBottom: 16 }}>
         <label style={lbl}>Bill To (Customer)</label>
@@ -131,9 +166,9 @@ export default function InvoiceModal({ sessions, jobs, employees, customers, dat
         </div>
       )}
 
-      <button onClick={handleGenerate}
-        style={{ width: '100%', padding: '14px', borderRadius: 12, border: 'none', background: done ? '#3BB273' : accent, color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: "'Syne', sans-serif" }}>
-        {done ? 'Downloaded!' : 'Generate PDF'}
+      <button onClick={() => setStep('preview')}
+        style={{ width: '100%', padding: '14px', borderRadius: 12, border: 'none', background: accent, color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: "'Syne', sans-serif" }}>
+        Preview Invoice
       </button>
     </Modal>
   );
