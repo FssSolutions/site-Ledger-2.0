@@ -441,7 +441,7 @@ export default function App() {
     } catch { toast('Network error. Could not add job.'); }
   }
   async function updateJob(job) {
-    const body = { name: job.name, rate: job.rate, color: job.color, notes: job.notes, status: job.status || 'active', address: job.address || null, budget_hours: job.budget_hours || null };
+    const body = { name: job.name, rate: job.rate, color: job.color, notes: job.notes, status: job.status || 'active', address: job.address || null, budget_hours: job.budget_hours || null, budget_cost: job.budget_cost || null };
     if (offlineUpdate('jobs', job.id, body, () => setJobs(p => p.map(j => j.id === job.id ? { ...j, ...body } : j)))) return;
     try {
       const r = await withRefresh(t => api.update(t, 'jobs', job.id, body));
