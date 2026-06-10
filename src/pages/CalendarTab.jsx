@@ -30,6 +30,8 @@ export default function CalendarTab({ jobs, employees, sessions, onSave, onDelet
 
   const ss = sel ? (byDay[dk(sel)] || []) : [];
   const selEarn = ss.reduce((s, x) => s + calcEarnings(x, jobs, employees), 0);
+  const selBilled = ss.reduce((s, x) => s + calcEarnings(x, jobs), 0);
+  const selProfit = selBilled - selEarn;
   const selMs = ss.reduce((s, x) => s + calcDur(x), 0);
   const selOT = sel ? ot.daily[dk(sel)] : null;
   const modalDate = sel ? new Date(yr, mo, sel) : new Date();
@@ -99,8 +101,13 @@ export default function CalendarTab({ jobs, employees, sessions, onSave, onDelet
             <div>
               <div style={{ color: '#111', fontSize: 16, fontWeight: 700, fontFamily: "'Syne', sans-serif" }}>{MN[mo]} {sel}</div>
               {ss.length > 0 && (
-                <div style={{ color: '#999', fontSize: 12, marginTop: 2, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ color: '#999', fontSize: 12, marginTop: 2, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                   {fmtDur(selMs)} · {fmtCAD(selEarn)}
+                  {selProfit > 0 && (
+                    <span style={{ background: '#eafaf1', color: '#1e8449', fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 4, fontFamily: "'DM Mono', monospace" }}>
+                      +{fmtCAD(selProfit)} profit
+                    </span>
+                  )}
                   {selOT && selOT.overtime > 0 && (
                     <span style={{ background: selOT.overtime > 4 ? '#FADBD8' : '#FDEBD0', color: selOT.overtime > 4 ? '#C0392B' : '#E67E22', fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 4, fontFamily: "'DM Mono', monospace" }}>
                       {selOT.overtime.toFixed(1)}h OT
@@ -132,7 +139,21 @@ export default function CalendarTab({ jobs, employees, sessions, onSave, onDelet
                     {new Date(s.end_time).toLocaleTimeString('en-CA', { hour: '2-digit', minute: '2-digit' })} · {fmtDur(calcDur(s))}
                   </div>
                 </div>
-                <div style={{ color: '#111', fontSize: 13, fontWeight: 600, marginRight: 4 }}>{fmtCAD(calcEarnings(s, jobs, employees))}</div>
+                <div style={{ textAlign: 'right', marginRight: 4 }}>
+                  {(() => {
+                    const cost = calcEarnings(s, jobs, employees);
+                    const billed = emp ? calcEarnings(s, jobs) : cost;
+                    const profit = billed - cost;
+                    return <>
+                      <div style={{ color: '#111', fontSize: 13, fontWeight: 600 }}>{fmtCAD(cost)}</div>
+                      {emp && profit !== 0 && (
+                        <div style={{ color: profit >= 0 ? '#1e8449' : '#C0392B', fontSize: 11, fontWeight: 600 }}>
+                          {profit >= 0 ? '+' : ''}{fmtCAD(profit)}
+                        </div>
+                      )}
+                    </>;
+                  })()}
+                </div>
                 <button onClick={() => setModal(s)} style={ib}><Icon name="edit" size={14} /></button>
                 <button onClick={() => { if (confirm('Delete this entry?')) onDelete(s.id); }} style={{ ...ib, color: '#e74c3c' }}><Icon name="trash" size={14} /></button>
               </div>

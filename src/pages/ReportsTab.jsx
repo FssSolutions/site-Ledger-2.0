@@ -33,7 +33,7 @@ export default function ReportsTab({ jobs, employees, sessions, mileage, expense
   const tm = f.reduce((s, x) => s + calcDur(x), 0);
   const totalKm = fm.reduce((s, x) => s + Number(x.km), 0);
   const bj = jobs.map(j => { const js = f.filter(s => s.job_id === j.id); return { ...j, e: js.reduce((s, x) => s + calcEarnings(x, jobs, employees), 0), h: js.reduce((s, x) => s + calcDur(x), 0), n: js.length }; }).filter(j => j.n > 0).sort((a, b) => b.e - a.e);
-  const be = employees.map(e => { const es = f.filter(s => s.employee_id === e.id); const hrs = es.reduce((s, x) => s + calcDur(x), 0) / 3600000; return { ...e, hrs, cost: hrs * e.rate, n: es.length }; }).filter(e => e.n > 0).sort((a, b) => b.hrs - a.hrs);
+  const be = employees.map(e => { const es = f.filter(s => s.employee_id === e.id); const hrs = es.reduce((s, x) => s + calcDur(x), 0) / 3600000; const cost = hrs * e.rate; const billed = es.reduce((s, x) => s + calcEarnings(x, jobs), 0); return { ...e, hrs, cost, billed, profit: billed - cost, n: es.length }; }).filter(e => e.n > 0).sort((a, b) => b.hrs - a.hrs);
 
   // Overtime calculations
   const ot = calcOvertime(f);
@@ -178,20 +178,31 @@ export default function ReportsTab({ jobs, employees, sessions, mileage, expense
           {be.map(e => {
             const eOT = empOT.find(x => x.id === e.id);
             return (
-              <div key={e.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid #f0f0f0' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Icon name="user" size={14} /></div>
-                  <div>
-                    <div style={{ color: '#333', fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
-                      {e.name}
-                      {eOT && <span style={{ background: '#FDEBD0', color: '#E67E22', fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 4 }}>OT</span>}
+              <div key={e.id} style={{ padding: '12px 0', borderBottom: '1px solid #f0f0f0' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Icon name="user" size={14} /></div>
+                    <div>
+                      <div style={{ color: '#333', fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
+                        {e.name}
+                        {eOT && <span style={{ background: '#FDEBD0', color: '#E67E22', fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 4 }}>OT</span>}
+                      </div>
+                      <div style={{ color: '#aaa', fontSize: 12 }}>{e.hrs.toFixed(1)} hrs · {fmtCAD(e.rate)}/hr</div>
                     </div>
-                    <div style={{ color: '#aaa', fontSize: 12 }}>{e.hrs.toFixed(1)} hrs</div>
+                  </div>
+                  <div style={{ background: e.profit >= 0 ? '#eafaf1' : '#FADBD8', color: e.profit >= 0 ? '#1e8449' : '#C0392B', fontSize: 12, fontWeight: 700, padding: '3px 10px', borderRadius: 6, fontFamily: "'DM Mono', monospace" }}>
+                    {e.profit >= 0 ? '+' : ''}{fmtCAD(e.profit)}
                   </div>
                 </div>
-                <div style={{ textAlign: 'right' }}>
-                  <div style={{ color: '#111', fontSize: 13, fontWeight: 600 }}>{fmtCAD(e.cost)}</div>
-                  <div style={{ color: '#bbb', fontSize: 11 }}>{fmtCAD(e.rate)}/hr</div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <div style={{ flex: 1, background: '#f8f8f8', borderRadius: 8, padding: '8px 10px' }}>
+                    <div style={{ color: '#aaa', fontSize: 10, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', marginBottom: 2 }}>Billed</div>
+                    <div style={{ color: '#111', fontSize: 13, fontWeight: 600 }}>{fmtCAD(e.billed)}</div>
+                  </div>
+                  <div style={{ flex: 1, background: '#f8f8f8', borderRadius: 8, padding: '8px 10px' }}>
+                    <div style={{ color: '#aaa', fontSize: 10, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', marginBottom: 2 }}>Labour</div>
+                    <div style={{ color: '#111', fontSize: 13, fontWeight: 600 }}>{fmtCAD(e.cost)}</div>
+                  </div>
                 </div>
               </div>
             );
