@@ -171,6 +171,7 @@ export default function ClockTab({ jobs, employees, sessions, active, onIn, onOu
                     {j?.name || 'Unknown'}{emp ? <span style={{ color: '#aaa', fontWeight: 400 }}> · {emp.name}</span> : null}
                   </div>
                   <div style={{ color: '#aaa', fontSize: 12 }}>{new Date(s.start_time).toLocaleDateString('en-CA')} · {fmtDur(calcDur(s))}</div>
+                  {s.notes && <div style={{ color: '#bbb', fontSize: 11, marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 200 }}>{s.notes}</div>}
                 </div>
                 <div style={{ color: '#111', fontSize: 13, fontWeight: 600, marginRight: 4 }}>{fmtCAD(calcEarnings(s, jobs, employees))}</div>
                 <button onClick={() => setEditSess(s)} style={ib}><Icon name="edit" size={14} /></button>

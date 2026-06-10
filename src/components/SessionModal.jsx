@@ -20,6 +20,7 @@ export default function SessionModal({ session, date, jobs, employees, onSave, o
     date: isEdit ? dayKey(session.start_time) : defaultDate,
     st: defaultSt,
     et: defaultEt,
+    notes: session?.notes || '',
   });
 
   const startDt = new Date(`${form.date}T${form.st}`);
@@ -68,6 +69,12 @@ export default function SessionModal({ session, date, jobs, employees, onSave, o
           <div style={{ flex: 1 }}><label style={lbl}>Start</label><input type="time" value={form.st} onChange={e => setForm({ ...form, st: e.target.value })} style={inp} /></div>
           <div style={{ flex: 1 }}><label style={lbl}>End</label><input type="time" value={form.et} onChange={e => setForm({ ...form, et: e.target.value })} style={inp} /></div>
         </div>
+        <div>
+          <label style={lbl}>Notes (optional)</label>
+          <textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })}
+            placeholder="Work completed, materials used..."
+            style={{ ...inp, height: 68, resize: 'vertical' }} />
+        </div>
         {valid && (
           <div style={{ background: `${job?.color}15`, border: `1px solid ${job?.color}33`, borderRadius: 12, padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div style={{ color: '#888', fontSize: 13 }}>{fmtDur(prevMs)}</div>
@@ -78,7 +85,7 @@ export default function SessionModal({ session, date, jobs, employees, onSave, o
           <div style={{ color: '#c0392b', fontSize: 12, padding: '8px 12px', background: '#fde8e8', borderRadius: 8 }}>End time must be after start time.</div>
         )}
         <button
-          onClick={() => { if (valid && form.jobId) onSave({ ...session, job_id: form.jobId, employee_id: form.empId || null, start_time: startDt.toISOString(), end_time: endDt.toISOString() }); }}
+          onClick={() => { if (valid && form.jobId) onSave({ ...session, job_id: form.jobId, employee_id: form.empId || null, start_time: startDt.toISOString(), end_time: endDt.toISOString(), notes: form.notes || null }); }}
           disabled={!valid || busy}
           style={{ width: '100%', padding: '15px', borderRadius: 12, border: 'none', background: valid ? job?.color || accent : '#e8e8e8', color: valid ? '#fff' : '#aaa', fontSize: 16, fontWeight: 700, fontFamily: "'Syne', sans-serif", cursor: valid ? 'pointer' : 'not-allowed', opacity: busy ? 0.6 : 1, marginTop: 4 }}>
           {busy ? 'Saving...' : (isEdit ? 'Save Changes' : 'Save Entry')}

@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import Icon from '../components/Icon.jsx';
 import { card, ib, inp, lbl } from '../styles.js';
 import { JOB_COLORS } from '../lib/constants.js';
-import { fmtCAD } from '../lib/utils.js';
+import { fmtCAD, calcDur } from '../lib/utils.js';
 import { useAccentColor } from '../lib/AccentColorContext.js';
 
 function Swatches({ ci, setCi }) {
@@ -20,13 +20,19 @@ const STATUS_OPTS = ['active', 'complete', 'archived'];
 const STATUS_LABELS = { active: 'Active', complete: 'Complete', archived: 'Archived' };
 const STATUS_COLORS = { active: '#3BB273', complete: '#2E86AB', archived: '#aaa' };
 
-export default function JobsTab({ jobs, onAdd, onUpdate, onDelete, isDesktop }) {
+export default function JobsTab({ jobs, sessions, onAdd, onUpdate, onDelete, isDesktop }) {
   const accent = useAccentColor();
   const [statusFilter, setStatusFilter] = useState('active');
   const [showAdd, setShowAdd] = useState(false);
   const [editId, setEditId] = useState(null);
-  const [form, setForm] = useState({ name: '', rate: '', notes: '', address: '', status: 'active' });
+  const [form, setForm] = useState({ name: '', rate: '', notes: '', address: '', status: 'active', budget_hours: '' });
   const [ci, setCi] = useState(0);
+
+  const jobMs = useMemo(() => {
+    const m = {};
+    sessions.forEach(s => { m[s.job_id] = (m[s.job_id] || 0) + calcDur(s); });
+    return m;
+  }, [sessions]);
 
   const filtered = statusFilter === 'all' ? jobs : jobs.filter(j => (j.status || 'active') === statusFilter);
 
@@ -58,6 +64,7 @@ export default function JobsTab({ jobs, onAdd, onUpdate, onDelete, isDesktop }) 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Job name" style={inp} />
                 <input type="number" value={form.rate} onChange={e => setForm({ ...form, rate: e.target.value })} placeholder="Rate (CAD/hr)" style={inp} />
+                <div><label style={lbl}>Budget Hours (optional)</label><input type="number" min="0" step="0.5" value={form.budget_hours} onChange={e => setForm({ ...form, budget_hours: e.target.value })} placeholder="e.g. 40" style={inp} /></div>
                 <div><label style={lbl}>Address (optional)</label><input value={form.address} onChange={e => setForm({ ...form, address: e.target.value })} placeholder="123 Main St, Vancouver, BC" style={inp} /></div>
                 <div><label style={lbl}>Notes</label><textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} placeholder="Contact, scope of work..." style={{ ...inp, height: 80, resize: 'vertical' }} /></div>
                 <div>
@@ -75,7 +82,7 @@ export default function JobsTab({ jobs, onAdd, onUpdate, onDelete, isDesktop }) 
                 </div>
                 <Swatches ci={ci} setCi={setCi} />
                 <div style={{ display: 'flex', gap: 8 }}>
-                  <button onClick={() => { onUpdate({ ...job, name: form.name, rate: parseFloat(form.rate), color: JOB_COLORS[ci % JOB_COLORS.length], notes: form.notes, address: form.address, status: form.status }); setEditId(null); }}
+                  <button onClick={() => { onUpdate({ ...job, name: form.name, rate: parseFloat(form.rate), color: JOB_COLORS[ci % JOB_COLORS.length], notes: form.notes, address: form.address, status: form.status, budget_hours: form.budget_hours ? parseFloat(form.budget_hours) : null }); setEditId(null); }}
                     style={{ flex: 1, padding: '10px', borderRadius: 8, border: 'none', background: accent, color: '#fff', fontWeight: 700, cursor: 'pointer' }}>Save</button>
                   <button onClick={() => setEditId(null)} style={{ padding: '10px 14px', borderRadius: 8, border: '1px solid #e0e0e0', background: 'transparent', color: '#888', cursor: 'pointer' }}>Cancel</button>
                 </div>
@@ -95,11 +102,27 @@ export default function JobsTab({ jobs, onAdd, onUpdate, onDelete, isDesktop }) 
                     </div>
                     <div style={{ color: '#999', fontSize: 12 }}>{fmtCAD(job.rate)}/hr</div>
                   </div>
-                  <button onClick={() => { setEditId(job.id); setForm({ name: job.name, rate: String(job.rate), notes: job.notes || '', address: job.address || '', status: job.status || 'active' }); setCi(JOB_COLORS.indexOf(job.color) || 0); }} style={{ ...ib, color: '#aaa', marginRight: 4 }}><Icon name="edit" size={15} /></button>
+                  <button onClick={() => { setEditId(job.id); setForm({ name: job.name, rate: String(job.rate), notes: job.notes || '', address: job.address || '', status: job.status || 'active', budget_hours: job.budget_hours ? String(job.budget_hours) : '' }); setCi(JOB_COLORS.indexOf(job.color) || 0); }} style={{ ...ib, color: '#aaa', marginRight: 4 }}><Icon name="edit" size={15} /></button>
                   <button onClick={() => { if (confirm('Delete this job?')) onDelete(job.id); }} style={{ ...ib, color: '#e74c3c' }}><Icon name="trash" size={15} /></button>
                 </div>
                 {job.address && <div style={{ color: '#888', fontSize: 12, marginTop: 6, paddingLeft: 24 }}>{job.address}</div>}
                 {job.notes && <div style={{ color: '#999', fontSize: 12, marginTop: 4, paddingLeft: 24, lineHeight: 1.5 }}>{job.notes}</div>}
+                {job.budget_hours > 0 && (() => {
+                  const logged = (jobMs[job.id] || 0) / 3600000;
+                  const pct = Math.min(100, (logged / job.budget_hours) * 100);
+                  const over = logged > job.budget_hours;
+                  return (
+                    <div style={{ paddingLeft: 24, marginTop: 10 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: over ? '#c0392b' : '#aaa', marginBottom: 4 }}>
+                        <span>{logged.toFixed(1)}h of {job.budget_hours}h budgeted</span>
+                        <span style={{ fontWeight: over ? 700 : 400 }}>{pct.toFixed(0)}%{over ? ' over' : ''}</span>
+                      </div>
+                      <div style={{ height: 5, borderRadius: 3, background: '#f0f0f0' }}>
+                        <div style={{ height: 5, borderRadius: 3, background: over ? '#e74c3c' : job.color, width: `${pct}%`, transition: 'width 0.3s' }} />
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             )}
           </div>
@@ -110,11 +133,12 @@ export default function JobsTab({ jobs, onAdd, onUpdate, onDelete, isDesktop }) 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Job name" style={inp} />
               <input type="number" value={form.rate} onChange={e => setForm({ ...form, rate: e.target.value })} placeholder="Hourly rate (CAD)" style={inp} />
+              <div><label style={lbl}>Budget Hours (optional)</label><input type="number" min="0" step="0.5" value={form.budget_hours} onChange={e => setForm({ ...form, budget_hours: e.target.value })} placeholder="e.g. 40" style={inp} /></div>
               <div><label style={lbl}>Address (optional)</label><input value={form.address} onChange={e => setForm({ ...form, address: e.target.value })} placeholder="123 Main St, Vancouver, BC" style={inp} /></div>
               <div><label style={lbl}>Notes (optional)</label><textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} placeholder="Contact, scope of work..." style={{ ...inp, height: 80, resize: 'vertical' }} /></div>
               <Swatches ci={ci} setCi={setCi} />
               <div style={{ display: 'flex', gap: 8 }}>
-                <button onClick={() => { if (!form.name || !form.rate) return; onAdd({ name: form.name, rate: parseFloat(form.rate), color: JOB_COLORS[ci % JOB_COLORS.length], notes: form.notes, address: form.address, status: 'active' }); setForm({ name: '', rate: '', notes: '', address: '', status: 'active' }); setShowAdd(false); }}
+                <button onClick={() => { if (!form.name || !form.rate) return; onAdd({ name: form.name, rate: parseFloat(form.rate), color: JOB_COLORS[ci % JOB_COLORS.length], notes: form.notes, address: form.address, status: 'active', budget_hours: form.budget_hours ? parseFloat(form.budget_hours) : null }); setForm({ name: '', rate: '', notes: '', address: '', status: 'active', budget_hours: '' }); setShowAdd(false); }}
                   style={{ flex: 1, padding: '10px', borderRadius: 8, border: 'none', background: accent, color: '#fff', fontWeight: 700, cursor: 'pointer' }}>Add Job</button>
                 <button onClick={() => setShowAdd(false)} style={{ padding: '10px 14px', borderRadius: 8, border: '1px solid #e0e0e0', background: 'transparent', color: '#888', cursor: 'pointer' }}>Cancel</button>
               </div>

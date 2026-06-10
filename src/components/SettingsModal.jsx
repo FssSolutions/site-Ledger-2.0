@@ -7,7 +7,7 @@ const PRESETS = [
   '#111111',
 ];
 
-export default function SettingsModal({ accentColor, onAccentChange, taxRate, onTaxChange, onClose }) {
+export default function SettingsModal({ accentColor, onAccentChange, taxRate, onTaxChange, reminderTime, onReminderChange, onClose }) {
   return (
     <Modal onClose={onClose}>
       <ModalHeader title="Settings" subtitle="Personalize your SiteLedger" onClose={onClose} />
@@ -47,6 +47,23 @@ export default function SettingsModal({ accentColor, onAccentChange, taxRate, on
             style={{ ...inp, flex: 1, fontFamily: "'DM Mono', monospace" }}
           />
         </div>
+      </div>
+
+      <div style={{ marginBottom: 24 }}>
+        <label style={lbl}>Clock-Out Reminder</label>
+        <div style={{ color: '#aaa', fontSize: 11, marginBottom: 8 }}>Alert when you're still clocked in after this time.</div>
+        <input
+          type="time"
+          value={reminderTime || ''}
+          onChange={e => onReminderChange(e.target.value)}
+          style={inp}
+        />
+        {reminderTime && (
+          <button onClick={() => onReminderChange('')}
+            style={{ marginTop: 6, fontSize: 12, color: '#aaa', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+            Clear reminder
+          </button>
+        )}
       </div>
 
       <div style={{ marginBottom: 8 }}>

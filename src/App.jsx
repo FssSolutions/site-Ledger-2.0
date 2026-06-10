@@ -81,11 +81,30 @@ export default function App() {
   const isDesktop = width >= 768;
   const [accentColor, setAccentColor] = useState(() => localStorage.getItem('sl_accent_color') || '#E8651A');
   const [taxRate, setTaxRate] = useState(() => parseFloat(localStorage.getItem('sl_tax_rate') || '5'));
+  const [reminderTime, setReminderTime] = useState(() => localStorage.getItem('sl_reminder_time') || '');
   const [showSettings, setShowSettings] = useState(false);
+  const reminderFiredRef = useRef('');
 
   useEffect(() => { localStorage.setItem('sl_accent_color', accentColor); }, [accentColor]);
   useEffect(() => { localStorage.setItem('sl_tax_rate', String(taxRate)); }, [taxRate]);
+  useEffect(() => { localStorage.setItem('sl_reminder_time', reminderTime); }, [reminderTime]);
   useEffect(() => { localStorage.setItem('sl_break_state', JSON.stringify(breakState)); }, [breakState]);
+
+  useEffect(() => {
+    if (!active || !reminderTime) return;
+    function checkReminder() {
+      const now = new Date();
+      const [rh, rm] = reminderTime.split(':').map(Number);
+      const todayKey = now.toDateString();
+      if ((now.getHours() > rh || (now.getHours() === rh && now.getMinutes() >= rm)) && reminderFiredRef.current !== todayKey) {
+        reminderFiredRef.current = todayKey;
+        toast("You're still clocked in — don't forget to clock out!", 'info');
+      }
+    }
+    checkReminder();
+    const id = setInterval(checkReminder, 60000);
+    return () => clearInterval(id);
+  }, [active, reminderTime]);
 
   function toast(message, type = 'error') {
     const id = Date.now();
@@ -374,13 +393,13 @@ export default function App() {
 
   async function saveSession(sess, onDone) {
     if (sess.id) {
-      const body = { job_id: sess.job_id, employee_id: sess.employee_id, start_time: sess.start_time, end_time: sess.end_time };
+      const body = { job_id: sess.job_id, employee_id: sess.employee_id, start_time: sess.start_time, end_time: sess.end_time, notes: sess.notes || null };
       if (offlineUpdate('sessions', sess.id, body, () => {
         setSessions(p => p.map(s => s.id === sess.id ? { ...s, ...body } : s));
         if (onDone) onDone();
       })) return;
     } else {
-      const body = { job_id: sess.job_id, employee_id: sess.employee_id, start_time: sess.start_time, end_time: sess.end_time };
+      const body = { job_id: sess.job_id, employee_id: sess.employee_id, start_time: sess.start_time, end_time: sess.end_time, notes: sess.notes || null };
       if (offlineInsert('sessions', body, () => {
         setSessions(p => [...p, { ...body, id: 'temp-' + Date.now() }]);
         if (onDone) onDone();
@@ -390,7 +409,7 @@ export default function App() {
     setBusy(true);
     try {
       if (sess.id) {
-        const r = await withRefresh(t => api.update(t, 'sessions', sess.id, { job_id: sess.job_id, employee_id: sess.employee_id, start_time: sess.start_time, end_time: sess.end_time }));
+        const r = await withRefresh(t => api.update(t, 'sessions', sess.id, { job_id: sess.job_id, employee_id: sess.employee_id, start_time: sess.start_time, end_time: sess.end_time, notes: sess.notes || null }));
         if (Array.isArray(r) && r[0]) setSessions(p => p.map(s => s.id === sess.id ? r[0] : s));
         else { toast('Failed to save entry.'); setBusy(false); return; }
       } else {
@@ -422,7 +441,7 @@ export default function App() {
     } catch { toast('Network error. Could not add job.'); }
   }
   async function updateJob(job) {
-    const body = { name: job.name, rate: job.rate, color: job.color, notes: job.notes, status: job.status || 'active', address: job.address || null };
+    const body = { name: job.name, rate: job.rate, color: job.color, notes: job.notes, status: job.status || 'active', address: job.address || null, budget_hours: job.budget_hours || null };
     if (offlineUpdate('jobs', job.id, body, () => setJobs(p => p.map(j => j.id === job.id ? { ...j, ...body } : j)))) return;
     try {
       const r = await withRefresh(t => api.update(t, 'jobs', job.id, body));
@@ -580,7 +599,7 @@ export default function App() {
       {tab === 'mileage' && <MileageTab jobs={jobs} mileage={mileage} onAdd={addMileage} onDelete={deleteMileage} busy={busy} isDesktop={isDesktop} />}
       {tab === 'expenses' && <ExpensesTab jobs={jobs} expenses={expenses} onAdd={addExpense} onDelete={deleteExpense} isDesktop={isDesktop} />}
       {tab === 'reports' && <ReportsTab jobs={jobs} employees={employees} sessions={sessions} mileage={mileage} expenses={expenses} company={company} customers={customers} taxRate={taxRate} isDesktop={isDesktop} onSaveInvoice={addInvoice} />}
-      {tab === 'jobs' && <JobsTab jobs={jobs} onAdd={addJob} onUpdate={updateJob} onDelete={deleteJob} isDesktop={isDesktop} />}
+      {tab === 'jobs' && <JobsTab jobs={jobs} sessions={sessions} onAdd={addJob} onUpdate={updateJob} onDelete={deleteJob} isDesktop={isDesktop} />}
       {tab === 'company' && <CompanyTab employees={employees} onAddEmp={addEmployee} onUpdateEmp={updateEmployee} onDeleteEmp={deleteEmployee} customers={customers} onAddCust={addCustomer} onUpdateCust={updateCustomer} onDeleteCust={deleteCustomer} invoices={invoices} onUpdateInvoice={updateInvoice} onDeleteInvoice={deleteInvoice} company={company} onUpdateCompany={updateCompany} isDesktop={isDesktop} />}
     </>
   );
@@ -603,6 +622,8 @@ export default function App() {
       onAccentChange={setAccentColor}
       taxRate={taxRate}
       onTaxChange={setTaxRate}
+      reminderTime={reminderTime}
+      onReminderChange={setReminderTime}
       onClose={() => setShowSettings(false)}
     />
   ) : null;
