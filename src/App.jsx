@@ -7,6 +7,7 @@ import Icon from './components/Icon.jsx';
 import Toast from './components/Toast.jsx';
 import OfflineBanner from './components/OfflineBanner.jsx';
 import AuthScreen from './pages/AuthScreen.jsx';
+import DashboardTab from './pages/DashboardTab.jsx';
 import ClockTab from './pages/ClockTab.jsx';
 import CalendarTab from './pages/CalendarTab.jsx';
 import MileageTab from './pages/MileageTab.jsx';
@@ -19,6 +20,7 @@ import AccentColorContext from './lib/AccentColorContext.js';
 import SettingsModal from './components/SettingsModal.jsx';
 
 const TABS = [
+  { id: 'home', l: 'Home', i: 'home' },
   { id: 'clock', l: 'Clock', i: 'clock' },
   { id: 'calendar', l: 'Calendar', i: 'cal' },
   { id: 'mileage', l: 'Mileage', i: 'truck' },
@@ -27,6 +29,9 @@ const TABS = [
   { id: 'jobs', l: 'Jobs', i: 'note' },
   { id: 'company', l: 'Company', i: 'building' },
 ];
+
+const NAV_PRIMARY = ['home', 'clock', 'calendar', 'reports'];
+const NAV_MORE = ['mileage', 'expenses', 'jobs', 'company'];
 
 function companyToDb(d) {
   return {
@@ -61,7 +66,8 @@ export default function App() {
     try { return JSON.parse(localStorage.getItem('sl_break_state')) || { pausedAt: null, totalBreakMs: 0 }; }
     catch { return { pausedAt: null, totalBreakMs: 0 }; }
   });
-  const [tab, setTab] = useState(() => localStorage.getItem('sl_default_tab') || 'clock');
+  const [tab, setTab] = useState(() => localStorage.getItem('sl_default_tab') || 'home');
+  const [showMore, setShowMore] = useState(false);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState(false);
@@ -563,6 +569,7 @@ export default function App() {
 
   const tabContent = (
     <>
+      {tab === 'home' && <DashboardTab jobs={jobs} employees={employees} sessions={sessions} active={active} breakState={breakState} onGoTo={id => { setTab(id); setShowMore(false); }} isDesktop={isDesktop} />}
       {tab === 'clock' && <ClockTab jobs={jobs} employees={employees} sessions={sessions} active={active} onIn={clockIn} onOut={clockOut} onPause={pauseTimer} onResume={resumeTimer} breakState={breakState} onSave={saveSession} onDelete={deleteSession} busy={busy} isDesktop={isDesktop} />}
       {tab === 'calendar' && <CalendarTab jobs={jobs} employees={employees} sessions={sessions} onSave={saveSession} onDelete={deleteSession} busy={busy} isDesktop={isDesktop} />}
       {tab === 'mileage' && <MileageTab jobs={jobs} mileage={mileage} onAdd={addMileage} onDelete={deleteMileage} busy={busy} isDesktop={isDesktop} />}
@@ -676,14 +683,44 @@ export default function App() {
 
       {loading ? loadingState : loadError ? errorState : tabContent}
 
-      <div style={{ position: 'fixed', bottom: 0, left: '50%', transform: 'translateX(-50%)', width: '100%', maxWidth: 430, background: '#fff', borderTop: '1px solid #e8e8e8', display: 'flex', padding: '8px 0 12px' }}>
-        {TABS.map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)}
-            style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, background: 'transparent', border: 'none', cursor: 'pointer', padding: '6px 0', color: tab === t.id ? accentColor : '#aaa' }}>
-            <Icon name={t.i} size={19} />
-            <span style={{ fontSize: 9, fontFamily: "'DM Mono', monospace", letterSpacing: 0.5 }}>{t.l}</span>
-          </button>
-        ))}
+      {/* More sheet backdrop */}
+      {showMore && <div onClick={() => setShowMore(false)} style={{ position: 'fixed', inset: 0, zIndex: 99 }} />}
+
+      {/* More sheet */}
+      {showMore && (
+        <div style={{ position: 'fixed', bottom: 56, left: '50%', transform: 'translateX(-50%)', width: '100%', maxWidth: 430, background: '#fff', borderTop: '1px solid #e8e8e8', boxShadow: '0 -6px 24px rgba(0,0,0,0.10)', zIndex: 100, borderRadius: '16px 16px 0 0', paddingBottom: 4 }}>
+          <div style={{ width: 36, height: 4, borderRadius: 2, background: '#e0e0e0', margin: '10px auto 8px' }} />
+          {NAV_MORE.map(id => {
+            const t = TABS.find(x => x.id === id);
+            return (
+              <button key={id} onClick={() => { setTab(id); setShowMore(false); }}
+                style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 24px', width: '100%', background: 'transparent', border: 'none', cursor: 'pointer', color: tab === id ? accentColor : '#333', fontSize: 15, fontWeight: tab === id ? 700 : 400, fontFamily: "'DM Sans', sans-serif" }}>
+                <Icon name={t.i} size={18} />
+                {t.l}
+                {tab === id && <div style={{ width: 6, height: 6, borderRadius: '50%', background: accentColor, marginLeft: 'auto' }} />}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Bottom nav */}
+      <div style={{ position: 'fixed', bottom: 0, left: '50%', transform: 'translateX(-50%)', width: '100%', maxWidth: 430, background: '#fff', borderTop: '1px solid #e8e8e8', display: 'flex', padding: '8px 0 12px', zIndex: 98 }}>
+        {NAV_PRIMARY.map(id => {
+          const t = TABS.find(x => x.id === id);
+          return (
+            <button key={id} onClick={() => { setTab(id); setShowMore(false); }}
+              style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, background: 'transparent', border: 'none', cursor: 'pointer', padding: '6px 0', color: tab === id ? accentColor : '#aaa' }}>
+              <Icon name={t.i} size={19} />
+              <span style={{ fontSize: 9, fontFamily: "'DM Mono', monospace", letterSpacing: 0.5 }}>{t.l}</span>
+            </button>
+          );
+        })}
+        <button onClick={() => setShowMore(s => !s)}
+          style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, background: 'transparent', border: 'none', cursor: 'pointer', padding: '6px 0', color: (showMore || NAV_MORE.includes(tab)) ? accentColor : '#aaa' }}>
+          <Icon name="dots" size={19} />
+          <span style={{ fontSize: 9, fontFamily: "'DM Mono', monospace", letterSpacing: 0.5 }}>More</span>
+        </button>
       </div>
       {settingsModal}
     </div>
