@@ -10,10 +10,15 @@ export function fmtCAD(n) {
   return new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD' }).format(n || 0);
 }
 
-export function calcEarnings(s, jobs) {
+export function calcEarnings(s, jobs, employees = []) {
+  if (!s.end_time) return 0;
+  const hrs = (new Date(s.end_time) - new Date(s.start_time)) / 3600000;
+  if (s.employee_id) {
+    const emp = employees.find(e => e.id === s.employee_id);
+    if (emp) return hrs * emp.rate;
+  }
   const j = jobs.find(x => x.id === s.job_id);
-  if (!j || !s.end_time) return 0;
-  return ((new Date(s.end_time) - new Date(s.start_time)) / 3600000) * j.rate;
+  return j ? hrs * j.rate : 0;
 }
 
 export function calcDur(s) {

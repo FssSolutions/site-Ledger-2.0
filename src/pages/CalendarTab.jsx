@@ -29,7 +29,7 @@ export default function CalendarTab({ jobs, employees, sessions, onSave, onDelet
   const ot = useMemo(() => calcOvertime(sessions), [sessions]);
 
   const ss = sel ? (byDay[dk(sel)] || []) : [];
-  const selEarn = ss.reduce((s, x) => s + calcEarnings(x, jobs), 0);
+  const selEarn = ss.reduce((s, x) => s + calcEarnings(x, jobs, employees), 0);
   const selMs = ss.reduce((s, x) => s + calcDur(x), 0);
   const selOT = sel ? ot.daily[dk(sel)] : null;
   const modalDate = sel ? new Date(yr, mo, sel) : new Date();
@@ -132,7 +132,7 @@ export default function CalendarTab({ jobs, employees, sessions, onSave, onDelet
                     {new Date(s.end_time).toLocaleTimeString('en-CA', { hour: '2-digit', minute: '2-digit' })} · {fmtDur(calcDur(s))}
                   </div>
                 </div>
-                <div style={{ color: '#111', fontSize: 13, fontWeight: 600, marginRight: 4 }}>{fmtCAD(calcEarnings(s, jobs))}</div>
+                <div style={{ color: '#111', fontSize: 13, fontWeight: 600, marginRight: 4 }}>{fmtCAD(calcEarnings(s, jobs, employees))}</div>
                 <button onClick={() => setModal(s)} style={ib}><Icon name="edit" size={14} /></button>
                 <button onClick={() => { if (confirm('Delete this entry?')) onDelete(s.id); }} style={{ ...ib, color: '#e74c3c' }}><Icon name="trash" size={14} /></button>
               </div>

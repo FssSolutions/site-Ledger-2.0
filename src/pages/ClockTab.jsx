@@ -20,7 +20,7 @@ export default function ClockTab({ jobs, employees, sessions, active, onIn, onOu
   const elapsed = active ? Math.max(0, effectiveNow - new Date(active.start_time) - (breakState?.totalBreakMs || 0)) : 0;
   const currentBreakMs = isPaused ? now - breakState.pausedAt : 0;
   const today = sessions.filter(s => new Date(s.start_time).toDateString() === new Date().toDateString());
-  const todayEarn = today.reduce((s, x) => s + calcEarnings(x, jobs), 0);
+  const todayEarn = today.reduce((s, x) => s + calcEarnings(x, jobs, employees), 0);
   const todayMs = today.reduce((s, x) => s + calcDur(x), 0);
   const todayHrs = (todayMs + elapsed) / 3600000;
   const dailyOT = Math.max(0, todayHrs - 8);
@@ -66,7 +66,7 @@ export default function ClockTab({ jobs, employees, sessions, active, onIn, onOu
           <div style={{ fontSize: 36, fontFamily: "'DM Mono', monospace", color: isPaused ? '#aaa' : aJob?.color, fontWeight: 600 }}>{fmtDur(elapsed)}</div>
           {isPaused
             ? <div style={{ color: '#c8860b', fontSize: 13, marginTop: 4, fontFamily: "'DM Mono', monospace" }}>break {fmtDur(currentBreakMs)}</div>
-            : <div style={{ color: '#888', fontSize: 13, marginTop: 4 }}>≈ {fmtCAD((elapsed / 3600000) * (aJob?.rate || 0))}</div>
+            : <div style={{ color: '#888', fontSize: 13, marginTop: 4 }}>≈ {fmtCAD((elapsed / 3600000) * (active?.employee_id ? (employees.find(e => e.id === active.employee_id)?.rate || aJob?.rate || 0) : (aJob?.rate || 0)))}</div>
           }
         </div>
       )}
@@ -138,7 +138,7 @@ export default function ClockTab({ jobs, employees, sessions, active, onIn, onOu
                   </div>
                   <div style={{ color: '#aaa', fontSize: 12 }}>{new Date(s.start_time).toLocaleDateString('en-CA')} · {fmtDur(calcDur(s))}</div>
                 </div>
-                <div style={{ color: '#111', fontSize: 13, fontWeight: 600, marginRight: 4 }}>{fmtCAD(calcEarnings(s, jobs))}</div>
+                <div style={{ color: '#111', fontSize: 13, fontWeight: 600, marginRight: 4 }}>{fmtCAD(calcEarnings(s, jobs, employees))}</div>
                 <button onClick={() => setEditSess(s)} style={ib}><Icon name="edit" size={14} /></button>
                 <button onClick={() => { if (confirm('Delete this entry?')) onDelete(s.id); }} style={{ ...ib, color: '#e74c3c' }}><Icon name="trash" size={14} /></button>
               </div>
