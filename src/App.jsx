@@ -328,10 +328,15 @@ export default function App() {
     setBusy(false);
   }
 
-  async function clockOut() {
+  async function clockOut(customEndTime) {
     if (!active) return;
-    const effectiveNow = breakState.pausedAt ? breakState.pausedAt : Date.now();
-    const endTime = new Date(effectiveNow - breakState.totalBreakMs).toISOString();
+    let endTime;
+    if (customEndTime) {
+      endTime = customEndTime;
+    } else {
+      const effectiveNow = breakState.pausedAt ? breakState.pausedAt : Date.now();
+      endTime = new Date(effectiveNow - breakState.totalBreakMs).toISOString();
+    }
     setBreakState({ pausedAt: null, totalBreakMs: 0 });
 
     if (active.id?.toString().startsWith('temp-')) {

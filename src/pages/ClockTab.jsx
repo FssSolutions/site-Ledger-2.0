@@ -10,9 +10,21 @@ export default function ClockTab({ jobs, employees, sessions, active, onIn, onOu
   const [selEmp, setSelEmp] = useState('');
   const [now, setNow] = useState(Date.now());
   const [editSess, setEditSess] = useState(null);
+  const [staleEndTime, setStaleEndTime] = useState('');
 
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
   useEffect(() => { if (activeJobs.length && !selJob) setSelJob(activeJobs[0].id); }, [jobs]);
+
+  const isStale = !!active && new Date(active.start_time).toDateString() !== new Date().toDateString();
+
+  useEffect(() => {
+    if (isStale && active && !staleEndTime) {
+      const d = new Date(active.start_time);
+      const pad = n => String(n).padStart(2, '0');
+      setStaleEndTime(`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T17:00`);
+    }
+    if (!active) setStaleEndTime('');
+  }, [active?.id, isStale]);
 
   const aJob = jobs.find(j => j.id === active?.job_id);
   const isPaused = !!breakState?.pausedAt;
@@ -22,7 +34,7 @@ export default function ClockTab({ jobs, employees, sessions, active, onIn, onOu
   const today = sessions.filter(s => new Date(s.start_time).toDateString() === new Date().toDateString());
   const todayEarn = today.reduce((s, x) => s + calcEarnings(x, jobs, employees), 0);
   const todayMs = today.reduce((s, x) => s + calcDur(x), 0);
-  const todayHrs = (todayMs + elapsed) / 3600000;
+  const todayHrs = isStale ? todayMs / 3600000 : (todayMs + elapsed) / 3600000;
   const dailyOT = Math.max(0, todayHrs - 8);
 
   return (
@@ -71,6 +83,28 @@ export default function ClockTab({ jobs, employees, sessions, active, onIn, onOu
         </div>
       )}
 
+      {isStale && (
+        <div style={{ margin: '12px 16px 0', background: '#fff8f0', border: '1.5px solid #f0c070', borderRadius: 14, padding: '16px 18px' }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#c87020', fontFamily: "'DM Mono', monospace", letterSpacing: 1, marginBottom: 6 }}>FORGOT TO CLOCK OUT?</div>
+          <div style={{ fontSize: 13, color: '#555', marginBottom: 12 }}>
+            This session started {new Date(active.start_time).toLocaleDateString('en-CA', { weekday: 'short', month: 'short', day: 'numeric' })} at {new Date(active.start_time).toLocaleTimeString('en-CA', { hour: '2-digit', minute: '2-digit' })}. Set your actual clock-out time:
+          </div>
+          <input type="datetime-local" value={staleEndTime} onChange={e => setStaleEndTime(e.target.value)}
+            max={new Date().toISOString().slice(0, 16)}
+            style={{ ...inp, marginBottom: 10 }} />
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={() => staleEndTime && onOut(new Date(staleEndTime).toISOString())} disabled={!staleEndTime || busy}
+              style={{ flex: 1, padding: '12px', borderRadius: 10, border: 'none', background: '#E67E22', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', opacity: !staleEndTime || busy ? 0.5 : 1 }}>
+              {busy ? 'Saving...' : 'Save Clock-Out'}
+            </button>
+            <button onClick={() => { if (confirm('Delete this session?')) onDelete(active.id); }}
+              style={{ padding: '12px 14px', borderRadius: 10, border: '1px solid #f0c0c0', background: '#fde8e8', color: '#c0392b', fontSize: 13, cursor: 'pointer' }}>
+              <Icon name="trash" size={15} />
+            </button>
+          </div>
+        </div>
+      )}
+
       <div style={{ ...card, margin: '12px 16px 0', padding: '16px 20px' }}>
         {!active ? (
           <>
@@ -105,7 +139,7 @@ export default function ClockTab({ jobs, employees, sessions, active, onIn, onOu
           </>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {isPaused
+            {!isStale && (isPaused
               ? <button onClick={onResume} disabled={busy}
                   style={{ width: '100%', padding: '14px', borderRadius: 12, border: 'none', background: aJob?.color || '#E8651A', color: '#fff', fontSize: 15, fontWeight: 700, fontFamily: "'Syne', sans-serif", cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
                   <Icon name="play" size={15} /> Resume
@@ -114,10 +148,10 @@ export default function ClockTab({ jobs, employees, sessions, active, onIn, onOu
                   style={{ width: '100%', padding: '12px', borderRadius: 12, border: '1.5px solid #ddd', background: '#f8f8f8', color: '#555', fontSize: 14, fontWeight: 600, fontFamily: "'Syne', sans-serif", cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
                   <Icon name="pause" size={14} /> Take a Break
                 </button>
-            }
-            <button onClick={onOut} disabled={busy}
+            )}
+            <button onClick={() => onOut()} disabled={busy}
               style={{ width: '100%', padding: '14px', borderRadius: 12, border: '2px solid #e8c6c6', background: '#fde8e8', color: '#c0392b', fontSize: 15, fontWeight: 700, fontFamily: "'Syne', sans-serif", cursor: 'pointer', opacity: busy ? 0.6 : 1 }}>
-              {busy ? 'Saving...' : 'Clock Out'}
+              {busy ? 'Saving...' : isStale ? 'Clock Out Now' : 'Clock Out'}
             </button>
           </div>
         )}
