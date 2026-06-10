@@ -4,7 +4,7 @@ import Icon from '../components/Icon.jsx';
 import { card, ib, inp, lbl } from '../styles.js';
 import { fmtDur, fmtCAD, calcEarnings, calcDur } from '../lib/utils.js';
 
-export default function ClockTab({ jobs, employees, sessions, active, onIn, onOut, onSave, onDelete, busy, isDesktop }) {
+export default function ClockTab({ jobs, employees, sessions, active, onIn, onOut, onPause, onResume, breakState, onSave, onDelete, busy, isDesktop }) {
   const activeJobs = jobs.filter(j => (j.status || 'active') === 'active');
   const [selJob, setSelJob] = useState(activeJobs[0]?.id || '');
   const [selEmp, setSelEmp] = useState('');
@@ -15,7 +15,10 @@ export default function ClockTab({ jobs, employees, sessions, active, onIn, onOu
   useEffect(() => { if (activeJobs.length && !selJob) setSelJob(activeJobs[0].id); }, [jobs]);
 
   const aJob = jobs.find(j => j.id === active?.job_id);
-  const elapsed = active ? now - new Date(active.start_time) : 0;
+  const isPaused = !!breakState?.pausedAt;
+  const effectiveNow = isPaused ? breakState.pausedAt : now;
+  const elapsed = active ? Math.max(0, effectiveNow - new Date(active.start_time) - (breakState?.totalBreakMs || 0)) : 0;
+  const currentBreakMs = isPaused ? now - breakState.pausedAt : 0;
   const today = sessions.filter(s => new Date(s.start_time).toDateString() === new Date().toDateString());
   const todayEarn = today.reduce((s, x) => s + calcEarnings(x, jobs), 0);
   const todayMs = today.reduce((s, x) => s + calcDur(x), 0);
@@ -52,14 +55,19 @@ export default function ClockTab({ jobs, employees, sessions, active, onIn, onOu
       </div>
 
       {active && (
-        <div style={{ background: `linear-gradient(135deg,${aJob?.color}22,${aJob?.color}11)`, border: `1px solid ${aJob?.color}44`, borderRadius: 16, margin: '12px 16px 0', padding: '20px 24px' }}>
+        <div style={{ background: isPaused ? '#fff9f0' : `linear-gradient(135deg,${aJob?.color}22,${aJob?.color}11)`, border: isPaused ? '1px solid #f0c070' : `1px solid ${aJob?.color}44`, borderRadius: 16, margin: '12px 16px 0', padding: '20px 24px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-            <div style={{ width: 8, height: 8, borderRadius: '50%', background: aJob?.color, boxShadow: `0 0 8px ${aJob?.color}` }} />
-            <span style={{ color: '#888', fontSize: 12, fontFamily: "'DM Mono', monospace", letterSpacing: 1 }}>ACTIVE</span>
+            {isPaused
+              ? <><Icon name="pause" size={10} /><span style={{ color: '#b8860b', fontSize: 12, fontFamily: "'DM Mono', monospace", letterSpacing: 1 }}>ON BREAK</span></>
+              : <><div style={{ width: 8, height: 8, borderRadius: '50%', background: aJob?.color, boxShadow: `0 0 8px ${aJob?.color}` }} /><span style={{ color: '#888', fontSize: 12, fontFamily: "'DM Mono', monospace", letterSpacing: 1 }}>ACTIVE</span></>
+            }
           </div>
           <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Syne', sans-serif", color: '#111', marginBottom: 4 }}>{aJob?.name}</div>
-          <div style={{ fontSize: 36, fontFamily: "'DM Mono', monospace", color: aJob?.color, fontWeight: 600 }}>{fmtDur(elapsed)}</div>
-          <div style={{ color: '#888', fontSize: 13, marginTop: 4 }}>≈ {fmtCAD((elapsed / 3600000) * (aJob?.rate || 0))}</div>
+          <div style={{ fontSize: 36, fontFamily: "'DM Mono', monospace", color: isPaused ? '#aaa' : aJob?.color, fontWeight: 600 }}>{fmtDur(elapsed)}</div>
+          {isPaused
+            ? <div style={{ color: '#c8860b', fontSize: 13, marginTop: 4, fontFamily: "'DM Mono', monospace" }}>break {fmtDur(currentBreakMs)}</div>
+            : <div style={{ color: '#888', fontSize: 13, marginTop: 4 }}>≈ {fmtCAD((elapsed / 3600000) * (aJob?.rate || 0))}</div>
+          }
         </div>
       )}
 
@@ -96,10 +104,22 @@ export default function ClockTab({ jobs, employees, sessions, active, onIn, onOu
             </button>
           </>
         ) : (
-          <button onClick={onOut} disabled={busy}
-            style={{ width: '100%', padding: '16px', borderRadius: 12, border: '2px solid #e8c6c6', background: '#fde8e8', color: '#c0392b', fontSize: 16, fontWeight: 700, fontFamily: "'Syne', sans-serif", cursor: 'pointer', opacity: busy ? 0.6 : 1 }}>
-            {busy ? 'Saving...' : 'Clock Out'}
-          </button>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {isPaused
+              ? <button onClick={onResume} disabled={busy}
+                  style={{ width: '100%', padding: '14px', borderRadius: 12, border: 'none', background: aJob?.color || '#E8651A', color: '#fff', fontSize: 15, fontWeight: 700, fontFamily: "'Syne', sans-serif", cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                  <Icon name="play" size={15} /> Resume
+                </button>
+              : <button onClick={onPause} disabled={busy}
+                  style={{ width: '100%', padding: '12px', borderRadius: 12, border: '1.5px solid #ddd', background: '#f8f8f8', color: '#555', fontSize: 14, fontWeight: 600, fontFamily: "'Syne', sans-serif", cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                  <Icon name="pause" size={14} /> Take a Break
+                </button>
+            }
+            <button onClick={onOut} disabled={busy}
+              style={{ width: '100%', padding: '14px', borderRadius: 12, border: '2px solid #e8c6c6', background: '#fde8e8', color: '#c0392b', fontSize: 15, fontWeight: 700, fontFamily: "'Syne', sans-serif", cursor: 'pointer', opacity: busy ? 0.6 : 1 }}>
+              {busy ? 'Saving...' : 'Clock Out'}
+            </button>
+          </div>
         )}
       </div>
 

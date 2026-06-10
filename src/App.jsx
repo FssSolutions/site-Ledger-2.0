@@ -57,6 +57,10 @@ export default function App() {
   const [expenses, setExpenses] = useState([]);
   const [invoices, setInvoices] = useState([]);
   const [active, setActive] = useState(null);
+  const [breakState, setBreakState] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('sl_break_state')) || { pausedAt: null, totalBreakMs: 0 }; }
+    catch { return { pausedAt: null, totalBreakMs: 0 }; }
+  });
   const [tab, setTab] = useState(() => localStorage.getItem('sl_default_tab') || 'clock');
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -75,6 +79,7 @@ export default function App() {
 
   useEffect(() => { localStorage.setItem('sl_accent_color', accentColor); }, [accentColor]);
   useEffect(() => { localStorage.setItem('sl_tax_rate', String(taxRate)); }, [taxRate]);
+  useEffect(() => { localStorage.setItem('sl_break_state', JSON.stringify(breakState)); }, [breakState]);
 
   function toast(message, type = 'error') {
     const id = Date.now();
@@ -297,6 +302,7 @@ export default function App() {
 
   // --- Data mutations ---
   async function clockIn(jobId, empId) {
+    setBreakState({ pausedAt: null, totalBreakMs: 0 });
     const startTime = new Date().toISOString();
     const body = { job_id: jobId, employee_id: empId || null, start_time: startTime };
 
@@ -318,7 +324,9 @@ export default function App() {
 
   async function clockOut() {
     if (!active) return;
-    const endTime = new Date().toISOString();
+    const effectiveNow = breakState.pausedAt ? breakState.pausedAt : Date.now();
+    const endTime = new Date(effectiveNow - breakState.totalBreakMs).toISOString();
+    setBreakState({ pausedAt: null, totalBreakMs: 0 });
 
     if (active.id?.toString().startsWith('temp-')) {
       enqueue({ type: 'insert', table: 'sessions', body: { ...active, end_time: endTime } });
@@ -340,6 +348,17 @@ export default function App() {
       else toast('Failed to clock out. Please try again.');
     } catch { toast('Network error. Could not clock out.'); }
     setBusy(false);
+  }
+
+  function pauseTimer() {
+    setBreakState(p => ({ ...p, pausedAt: Date.now() }));
+  }
+
+  function resumeTimer() {
+    setBreakState(p => ({
+      totalBreakMs: p.totalBreakMs + (p.pausedAt ? Date.now() - p.pausedAt : 0),
+      pausedAt: null
+    }));
   }
 
   async function saveSession(sess, onDone) {
@@ -544,7 +563,7 @@ export default function App() {
 
   const tabContent = (
     <>
-      {tab === 'clock' && <ClockTab jobs={jobs} employees={employees} sessions={sessions} active={active} onIn={clockIn} onOut={clockOut} onSave={saveSession} onDelete={deleteSession} busy={busy} isDesktop={isDesktop} />}
+      {tab === 'clock' && <ClockTab jobs={jobs} employees={employees} sessions={sessions} active={active} onIn={clockIn} onOut={clockOut} onPause={pauseTimer} onResume={resumeTimer} breakState={breakState} onSave={saveSession} onDelete={deleteSession} busy={busy} isDesktop={isDesktop} />}
       {tab === 'calendar' && <CalendarTab jobs={jobs} employees={employees} sessions={sessions} onSave={saveSession} onDelete={deleteSession} busy={busy} isDesktop={isDesktop} />}
       {tab === 'mileage' && <MileageTab jobs={jobs} mileage={mileage} onAdd={addMileage} onDelete={deleteMileage} busy={busy} isDesktop={isDesktop} />}
       {tab === 'expenses' && <ExpensesTab jobs={jobs} expenses={expenses} onAdd={addExpense} onDelete={deleteExpense} isDesktop={isDesktop} />}
