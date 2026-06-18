@@ -5,14 +5,14 @@ import generateInvoice from '../lib/generateInvoice.js';
 import { useAccentColor } from '../lib/AccentColorContext.js';
 import { calcEarnings } from '../lib/utils.js';
 
-export default function InvoiceModal({ sessions, jobs, employees, customers, dateRange, company, taxRate, onClose, onSaveInvoice }) {
+export default function InvoiceModal({ sessions, jobs, employees, customers, dateRange, company, taxRate, onClose, onSaveInvoice, voiceRequest = null }) {
   const accent = useAccentColor();
-  const [selectedCustId, setSelectedCustId] = useState('');
+  const [selectedCustId, setSelectedCustId] = useState(voiceRequest?.customer_id || '');
   const [invoiceNum, setInvoiceNum] = useState(() => {
     const n = parseInt(localStorage.getItem('sl_next_invoice_num') || '1', 10);
     return `INV-${String(n).padStart(3, '0')}`;
   });
-  const [selectedJobIds, setSelectedJobIds] = useState([]);
+  const [selectedJobIds, setSelectedJobIds] = useState(voiceRequest?.job_ids || []);
   const [done, setDone] = useState(false);
 
   // Jobs that have sessions in the date range
@@ -51,7 +51,7 @@ export default function InvoiceModal({ sessions, jobs, employees, customers, dat
     }
     if (onSaveInvoice) {
       const billSessions = activeSessions.filter(s => selectedJobIds.length === 0 || selectedJobIds.includes(s.job_id));
-      const subtotal = billSessions.reduce((s, x) => s + calcEarnings(x, jobs), 0);
+      const subtotal = billSessions.reduce((s, x) => s + calcEarnings(x, jobs, employees), 0);
       const total = subtotal + subtotal * (taxRate / 100);
       const [rs, re] = dateRange;
       onSaveInvoice({

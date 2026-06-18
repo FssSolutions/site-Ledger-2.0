@@ -85,11 +85,12 @@ export const api = {
       if (r.status === 401) return { _expired: true };
     } catch {}
   },
-  async processVoiceEntry(t, audioBlob, { jobs, now, timezone, defaultStart = '08:00', elapsedSeconds } = {}) {
+  async processVoiceEntry(t, audioBlob, { jobs, customers, now, timezone, defaultStart = '08:00', elapsedSeconds } = {}) {
     try {
       const form = new FormData();
       form.append('audio', audioBlob, `voice-entry.${audioBlob.type.includes('mp4') ? 'mp4' : 'webm'}`);
       form.append('jobs', JSON.stringify(jobs || []));
+      form.append('customers', JSON.stringify(customers || []));
       form.append('now', now || new Date().toISOString());
       form.append('timezone', timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Vancouver');
       form.append('defaultStart', defaultStart);
