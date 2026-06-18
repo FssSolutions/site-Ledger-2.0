@@ -424,6 +424,20 @@ export default function App() {
     if (onDone) onDone();
   }
 
+  async function processVoiceEntry(audioBlob, meta = {}) {
+    if (!isOnline()) return { error: { message: 'Voice entries need internet.' } };
+    const result = await withRefresh(t => api.processVoiceEntry(t, audioBlob, {
+      ...meta,
+      jobs: jobs
+        .filter(j => (j.status || 'active') === 'active')
+        .map(j => ({ id: j.id, name: j.name, address: j.address || '', status: j.status || 'active' })),
+      now: new Date().toISOString(),
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Vancouver',
+      defaultStart: '08:00',
+    }));
+    return result || { error: { message: 'Your session expired. Please sign in again.' } };
+  }
+
   async function deleteSession(id) {
     if (offlineDelete('sessions', id, () => setSessions(p => p.filter(s => s.id !== id)))) return;
     try { await withRefresh(t => api.delete(t, 'sessions', id)); setSessions(p => p.filter(s => s.id !== id)); }
@@ -594,7 +608,7 @@ export default function App() {
   const tabContent = (
     <>
       {tab === 'home' && <DashboardTab jobs={jobs} employees={employees} sessions={sessions} active={active} breakState={breakState} onGoTo={id => { setTab(id); setShowMore(false); }} isDesktop={isDesktop} />}
-      {tab === 'clock' && <ClockTab jobs={jobs} employees={employees} sessions={sessions} active={active} onIn={clockIn} onOut={clockOut} onPause={pauseTimer} onResume={resumeTimer} breakState={breakState} onSave={saveSession} onDelete={deleteSession} busy={busy} isDesktop={isDesktop} />}
+      {tab === 'clock' && <ClockTab jobs={jobs} employees={employees} sessions={sessions} active={active} onIn={clockIn} onOut={clockOut} onPause={pauseTimer} onResume={resumeTimer} breakState={breakState} onSave={saveSession} onDelete={deleteSession} onVoiceProcess={processVoiceEntry} online={online} busy={busy} isDesktop={isDesktop} />}
       {tab === 'calendar' && <CalendarTab jobs={jobs} employees={employees} sessions={sessions} onSave={saveSession} onDelete={deleteSession} busy={busy} isDesktop={isDesktop} />}
       {tab === 'mileage' && <MileageTab jobs={jobs} mileage={mileage} onAdd={addMileage} onDelete={deleteMileage} busy={busy} isDesktop={isDesktop} />}
       {tab === 'expenses' && <ExpensesTab jobs={jobs} expenses={expenses} onAdd={addExpense} onDelete={deleteExpense} isDesktop={isDesktop} />}

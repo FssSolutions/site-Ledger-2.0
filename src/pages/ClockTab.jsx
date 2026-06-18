@@ -1,15 +1,18 @@
 import { useState, useEffect } from 'react';
 import SessionModal from '../components/SessionModal.jsx';
+import VoiceEntryModal from '../components/VoiceEntryModal.jsx';
 import Icon from '../components/Icon.jsx';
 import { card, ib, inp, lbl } from '../styles.js';
 import { fmtDur, fmtCAD, calcEarnings, calcDur } from '../lib/utils.js';
 
-export default function ClockTab({ jobs, employees, sessions, active, onIn, onOut, onPause, onResume, breakState, onSave, onDelete, busy, isDesktop }) {
+export default function ClockTab({ jobs, employees, sessions, active, onIn, onOut, onPause, onResume, breakState, onSave, onDelete, onVoiceProcess, online, busy, isDesktop }) {
   const activeJobs = jobs.filter(j => (j.status || 'active') === 'active');
   const [selJob, setSelJob] = useState(activeJobs[0]?.id || '');
   const [selEmp, setSelEmp] = useState('');
   const [now, setNow] = useState(Date.now());
   const [editSess, setEditSess] = useState(null);
+  const [showVoice, setShowVoice] = useState(false);
+  const [voiceDrafts, setVoiceDrafts] = useState([]);
   const [staleEndTime, setStaleEndTime] = useState('');
 
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
@@ -36,6 +39,8 @@ export default function ClockTab({ jobs, employees, sessions, active, onIn, onOu
   const todayMs = today.reduce((s, x) => s + calcDur(x), 0);
   const todayHrs = isStale ? todayMs / 3600000 : (todayMs + elapsed) / 3600000;
   const dailyOT = Math.max(0, todayHrs - 8);
+  const voiceDraft = voiceDrafts[0] || null;
+  const voiceDraftCount = voiceDrafts.length;
 
   return (
     <div style={{ padding: isDesktop ? '0 0 24px' : '0 0 100px' }}>
@@ -43,6 +48,38 @@ export default function ClockTab({ jobs, employees, sessions, active, onIn, onOu
         <SessionModal session={editSess} jobs={jobs} employees={employees}
           onSave={s => { onSave(s); setEditSess(null); }}
           onClose={() => setEditSess(null)} busy={busy} />
+      )}
+      {showVoice && (
+        <VoiceEntryModal
+          jobs={activeJobs}
+          online={online}
+          onProcess={onVoiceProcess}
+          onDraft={draft => {
+            const entries = Array.isArray(draft.entries) && draft.entries.length ? draft.entries : [draft];
+            setShowVoice(false);
+            setVoiceDrafts(entries.map((entry, index) => ({ ...entry, draftId: `${Date.now()}-${index}` })));
+          }}
+          onClose={() => setShowVoice(false)}
+        />
+      )}
+      {voiceDraft && (
+        <SessionModal
+          key={voiceDraft.draftId}
+          initialSession={voiceDraft.session}
+          voiceMeta={{
+            transcript: voiceDraft.transcript,
+            assumptions: voiceDraft.assumptions,
+            warnings: voiceDraftCount > 1
+              ? [`Reviewing ${voiceDraftCount} voice drafts. Save this one to continue to the next.`, ...(voiceDraft.warnings || [])]
+              : voiceDraft.warnings,
+            confidence: voiceDraft.confidence,
+          }}
+          jobs={jobs}
+          employees={employees}
+          onSave={s => { onSave(s, () => setVoiceDrafts(prev => prev.slice(1))); }}
+          onClose={() => setVoiceDrafts([])}
+          busy={busy}
+        />
       )}
 
       <div style={{ ...card, padding: '16px 20px', margin: '16px 16px 0' }}>
@@ -64,6 +101,16 @@ export default function ClockTab({ jobs, employees, sessions, active, onIn, onOu
             <div style={{ color: '#999', fontSize: 12, marginTop: 4 }}>logged</div>
           </div>
         </div>
+      </div>
+
+      <div style={{ margin: '12px 16px 0' }}>
+        <button
+          onClick={() => setShowVoice(true)}
+          disabled={busy}
+          style={{ width: '100%', padding: '13px 16px', borderRadius: 12, border: '1.5px solid #e8e8e8', background: '#fff', color: '#333', fontSize: 14, fontWeight: 700, cursor: busy ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: busy ? 0.6 : 1 }}
+        >
+          <Icon name="mic" size={16} /> Voice Entry
+        </button>
       </div>
 
       {active && (

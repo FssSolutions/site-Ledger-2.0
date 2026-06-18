@@ -85,4 +85,27 @@ export const api = {
       if (r.status === 401) return { _expired: true };
     } catch {}
   },
+  async processVoiceEntry(t, audioBlob, { jobs, now, timezone, defaultStart = '08:00', elapsedSeconds } = {}) {
+    try {
+      const form = new FormData();
+      form.append('audio', audioBlob, `voice-entry.${audioBlob.type.includes('mp4') ? 'mp4' : 'webm'}`);
+      form.append('jobs', JSON.stringify(jobs || []));
+      form.append('now', now || new Date().toISOString());
+      form.append('timezone', timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Vancouver');
+      form.append('defaultStart', defaultStart);
+      if (elapsedSeconds) form.append('elapsedSeconds', String(elapsedSeconds));
+
+      const r = await fetch(`${SURL}/functions/v1/voice-entry`, {
+        method: 'POST',
+        headers: { apikey: SKEY, Authorization: `Bearer ${t}` },
+        body: form,
+      });
+      if (r.status === 401) return { _expired: true };
+      const data = await r.json().catch(() => null);
+      if (!r.ok) return { error: { message: data?.error || 'Voice processing failed.' } };
+      return data;
+    } catch (ex) {
+      return { error: { message: 'Network error: ' + ex.message } };
+    }
+  },
 };

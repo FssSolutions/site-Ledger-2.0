@@ -6,21 +6,22 @@ import { MN } from '../lib/constants.js';
 import { fmtDur, fmtCAD, dayKey, todayStr } from '../lib/utils.js';
 import { useAccentColor } from '../lib/AccentColorContext.js';
 
-export default function SessionModal({ session, date, jobs, employees, onSave, onClose, busy }) {
+export default function SessionModal({ session, initialSession, voiceMeta, date, jobs, employees, onSave, onClose, busy }) {
   const accent = useAccentColor();
-  const isEdit = !!session;
+  const draft = session || initialSession || null;
+  const isEdit = !!session?.id;
   const defaultDate = date
     ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
     : todayStr();
-  const defaultSt = isEdit ? new Date(session.start_time).toTimeString().slice(0, 5) : '08:00';
-  const defaultEt = isEdit && session.end_time ? new Date(session.end_time).toTimeString().slice(0, 5) : '16:00';
+  const defaultSt = draft?.start_time ? new Date(draft.start_time).toTimeString().slice(0, 5) : '08:00';
+  const defaultEt = draft?.end_time ? new Date(draft.end_time).toTimeString().slice(0, 5) : '16:00';
   const [form, setForm] = useState({
-    jobId: session?.job_id || jobs[0]?.id || '',
-    empId: session?.employee_id || '',
-    date: isEdit ? dayKey(session.start_time) : defaultDate,
+    jobId: draft ? draft.job_id || '' : jobs[0]?.id || '',
+    empId: draft?.employee_id || '',
+    date: draft?.start_time ? dayKey(draft.start_time) : defaultDate,
     st: defaultSt,
     et: defaultEt,
-    notes: session?.notes || '',
+    notes: draft?.notes || '',
   });
 
   const startDt = new Date(`${form.date}T${form.st}`);
@@ -29,14 +30,39 @@ export default function SessionModal({ session, date, jobs, employees, onSave, o
   const job = jobs.find(j => j.id === form.jobId);
   const prevMs = valid ? endDt - startDt : 0;
   const prevEarn = valid && job ? (prevMs / 3600000) * job.rate : 0;
-  const subtitle = isEdit
+  const subtitle = voiceMeta
+    ? 'Review voice entry'
+    : isEdit
     ? 'Edit entry'
     : date ? `${MN[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}` : 'New entry';
+  const warnings = voiceMeta?.warnings || [];
+  const assumptions = voiceMeta?.assumptions || [];
 
   return (
     <Modal onClose={onClose}>
       <ModalHeader title={isEdit ? 'Edit Entry' : 'Add Entry'} subtitle={subtitle} onClose={onClose} />
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {voiceMeta && (
+          <div style={{ border: '1px solid #f0c070', borderRadius: 12, background: '#fffaf2', padding: '12px 14px' }}>
+            <div style={{ color: '#c87020', fontSize: 11, fontWeight: 700, fontFamily: "'DM Mono', monospace", letterSpacing: 1, textTransform: 'uppercase', marginBottom: 8 }}>Voice draft</div>
+            {warnings.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 8 }}>
+                {warnings.map((w, i) => <div key={i} style={{ color: '#8a5a14', fontSize: 12 }}>{w}</div>)}
+              </div>
+            )}
+            {assumptions.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 8 }}>
+                {assumptions.map((a, i) => <div key={i} style={{ color: '#777', fontSize: 12 }}>{a}</div>)}
+              </div>
+            )}
+            {voiceMeta.transcript && (
+              <details>
+                <summary style={{ color: '#777', fontSize: 12, cursor: 'pointer' }}>Transcript</summary>
+                <div style={{ color: '#555', fontSize: 12, lineHeight: 1.5, marginTop: 8, whiteSpace: 'pre-wrap' }}>{voiceMeta.transcript}</div>
+              </details>
+            )}
+          </div>
+        )}
         <div>
           <label style={lbl}>Job</label>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -86,8 +112,8 @@ export default function SessionModal({ session, date, jobs, employees, onSave, o
         )}
         <button
           onClick={() => { if (valid && form.jobId) onSave({ ...session, job_id: form.jobId, employee_id: form.empId || null, start_time: startDt.toISOString(), end_time: endDt.toISOString(), notes: form.notes || null }); }}
-          disabled={!valid || busy}
-          style={{ width: '100%', padding: '15px', borderRadius: 12, border: 'none', background: valid ? job?.color || accent : '#e8e8e8', color: valid ? '#fff' : '#aaa', fontSize: 16, fontWeight: 700, fontFamily: "'Syne', sans-serif", cursor: valid ? 'pointer' : 'not-allowed', opacity: busy ? 0.6 : 1, marginTop: 4 }}>
+          disabled={!valid || !form.jobId || busy}
+          style={{ width: '100%', padding: '15px', borderRadius: 12, border: 'none', background: valid && form.jobId ? job?.color || accent : '#e8e8e8', color: valid && form.jobId ? '#fff' : '#aaa', fontSize: 16, fontWeight: 700, fontFamily: "'Syne', sans-serif", cursor: valid && form.jobId ? 'pointer' : 'not-allowed', opacity: busy ? 0.6 : 1, marginTop: 4 }}>
           {busy ? 'Saving...' : (isEdit ? 'Save Changes' : 'Save Entry')}
         </button>
       </div>
