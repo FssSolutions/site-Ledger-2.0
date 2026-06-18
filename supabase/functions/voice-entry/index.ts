@@ -194,6 +194,15 @@ Deno.serve(async req => {
       return json({ error: 'No speech was detected.' }, 422);
     }
 
+    // Keyword pre-check: if the transcript contains an unambiguous invoice trigger
+    // word, force the intent so the AI cannot misclassify it as a time entry.
+    const INVOICE_RE = /\b(invoice|invoicing|invoiced)\b/i;
+    const forceInvoice = INVOICE_RE.test(transcript);
+
+    const intentInstruction = forceInvoice
+      ? 'The transcript contains the word "invoice". The intent MUST be "invoice_request". Do NOT classify this as a time_entry.'
+      : '';
+
     const extractRes = await fetch('https://api.openai.com/v1/responses', {
       method: 'POST',
       headers: {
@@ -205,7 +214,15 @@ Deno.serve(async req => {
         input: [
           {
             role: 'system',
-            content: `You process voice memos from contractors and carpenters. First determine intent:\n- "time_entry": the speaker is logging hours worked. Extract one entry per job/date/time block. Pick job_id only from the provided jobs. Do not invent missing hours. Convert dates and times to local user context. Keep each entry notes focused on work for that entry.\n- "invoice_request": the speaker is asking to generate an invoice (e.g. "invoice John Smith", "create an invoice for the kitchen job", "bill ABC Construction"). Extract customer and date range. Match customer_id from provided customers. Match job_ids from provided jobs. Leave entries array empty.\n\nNote: recording_seconds is the length of the voice memo itself, not the hours worked.`,
+            content: `You process voice memos from contractors and carpenters.${intentInstruction ? ' ' + intentInstruction : ''}
+
+Determine intent:
+- "time_entry": the speaker is logging hours worked (e.g. "worked 8 hours on the Smith job", "clocked in at 7 on the kitchen reno"). Extract one entry per job/date/time block. Pick job_id only from the provided jobs. Do not invent missing hours. Convert dates and times to local user context.
+- "invoice_request": the speaker wants to generate an invoice. Triggers include ANY of: the word "invoice", "make an invoice", "create an invoice", "generate an invoice", "bill [someone]", "billing for [job]". The target can be a customer name OR a job name OR a job site address (e.g. "invoice for 453 East Kings" means invoice for the job at that address). Match job_ids by job name OR job address from the provided jobs list. Match customer_id from the provided customers list. If no date range is stated, leave date_range_start and date_range_end null. Leave entries array empty.
+
+IMPORTANT: If the word "invoice" appears anywhere in the transcript, intent is always "invoice_request".
+
+Note: recording_seconds is the length of the voice memo itself, not the hours worked.`,
           },
           {
             role: 'user',
