@@ -79,8 +79,14 @@ export default function VoiceEntryModal({ jobs, onProcess, onDraft, onClose, onl
           return Math.min(next, MAX_SECONDS);
         });
       }, 1000);
-    } catch {
-      setError('Microphone access was blocked or unavailable.');
+    } catch (err) {
+      if (err?.name === 'NotAllowedError' || err?.name === 'PermissionDeniedError') {
+        setError('Microphone permission was denied. Enable it in your browser settings and try again.');
+      } else if (err?.name === 'NotFoundError' || err?.name === 'DevicesNotFoundError') {
+        setError('No microphone was found. Connect one and try again.');
+      } else {
+        setError('Could not access the microphone. Try refreshing the page.');
+      }
       setState('idle');
     }
   }

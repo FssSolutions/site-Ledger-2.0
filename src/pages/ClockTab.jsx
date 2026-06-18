@@ -5,7 +5,7 @@ import Icon from '../components/Icon.jsx';
 import { card, ib, inp, lbl } from '../styles.js';
 import { fmtDur, fmtCAD, calcEarnings, calcDur } from '../lib/utils.js';
 
-export default function ClockTab({ jobs, employees, sessions, active, onIn, onOut, onPause, onResume, breakState, onSave, onDelete, onVoiceProcess, online, busy, isDesktop }) {
+export default function ClockTab({ jobs, employees, sessions, active, onIn, onOut, onPause, onResume, breakState, onSave, onDelete, onVoiceProcess, onVoiceInvoice, online, busy, isDesktop }) {
   const activeJobs = jobs.filter(j => (j.status || 'active') === 'active');
   const [selJob, setSelJob] = useState(activeJobs[0]?.id || '');
   const [selEmp, setSelEmp] = useState('');
@@ -55,8 +55,12 @@ export default function ClockTab({ jobs, employees, sessions, active, onIn, onOu
           online={online}
           onProcess={onVoiceProcess}
           onDraft={draft => {
-            const entries = Array.isArray(draft.entries) && draft.entries.length ? draft.entries : [draft];
             setShowVoice(false);
+            if (draft.intent === 'invoice_request' && draft.invoice_request && onVoiceInvoice) {
+              onVoiceInvoice(draft.invoice_request);
+              return;
+            }
+            const entries = Array.isArray(draft.entries) && draft.entries.length ? draft.entries : [draft];
             setVoiceDrafts(entries.map((entry, index) => ({ ...entry, draftId: `${Date.now()}-${index}` })));
           }}
           onClose={() => setShowVoice(false)}
@@ -76,8 +80,25 @@ export default function ClockTab({ jobs, employees, sessions, active, onIn, onOu
           }}
           jobs={jobs}
           employees={employees}
-          onSave={s => { onSave(s, () => setVoiceDrafts(prev => prev.slice(1))); }}
-          onClose={() => setVoiceDrafts([])}
+          onSave={s => {
+            const sStart = s.start_time ? new Date(s.start_time) : null;
+            const sEnd = s.end_time ? new Date(s.end_time) : null;
+            if (sStart && sEnd) {
+              const overlap = sessions.find(ex => {
+                if (!ex.start_time || !ex.end_time) return false;
+                return sStart < new Date(ex.end_time) && sEnd > new Date(ex.start_time);
+              });
+              if (overlap) {
+                const j = jobs.find(x => x.id === overlap.job_id);
+                if (!window.confirm(`This overlaps with an existing ${j?.name || 'session'}. Save anyway?`)) return;
+              }
+            }
+            onSave(s, () => setVoiceDrafts(prev => prev.slice(1)));
+          }}
+          onClose={() => {
+            if (voiceDraftCount > 1 && !window.confirm(`Discard ${voiceDraftCount} remaining voice drafts?`)) return;
+            setVoiceDrafts([]);
+          }}
           busy={busy}
         />
       )}
@@ -137,7 +158,7 @@ export default function ClockTab({ jobs, employees, sessions, active, onIn, onOu
             This session started {new Date(active.start_time).toLocaleDateString('en-CA', { weekday: 'short', month: 'short', day: 'numeric' })} at {new Date(active.start_time).toLocaleTimeString('en-CA', { hour: '2-digit', minute: '2-digit' })}. Set your actual clock-out time:
           </div>
           <input type="datetime-local" value={staleEndTime} onChange={e => setStaleEndTime(e.target.value)}
-            max={new Date().toISOString().slice(0, 16)}
+            max={new Date(now).toISOString().slice(0, 16)}
             style={{ ...inp, marginBottom: 10 }} />
           <div style={{ display: 'flex', gap: 8 }}>
             <button onClick={() => staleEndTime && onOut(new Date(staleEndTime).toISOString())} disabled={!staleEndTime || busy}

@@ -9,12 +9,18 @@ const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
 const entrySchema = {
   type: 'object',
   additionalProperties: false,
-  required: ['entries', 'global_warnings'],
+  required: ['intent', 'entries', 'invoice_request', 'global_warnings'],
   properties: {
+    intent: {
+      type: 'string',
+      enum: ['time_entry', 'invoice_request'],
+      description: '"time_entry" when logging hours worked; "invoice_request" when the speaker is asking to generate an invoice for a customer',
+    },
     entries: {
       type: 'array',
-      minItems: 1,
+      minItems: 0,
       maxItems: 8,
+      description: 'Populated only when intent is time_entry. Empty array for invoice_request.',
       items: {
         type: 'object',
         additionalProperties: false,
@@ -41,6 +47,20 @@ const entrySchema = {
             },
           },
         },
+      },
+    },
+    invoice_request: {
+      type: 'object',
+      additionalProperties: false,
+      description: 'Populated only when intent is invoice_request. All fields null for time_entry.',
+      required: ['customer_id', 'customer_name_guess', 'date_range_start', 'date_range_end', 'job_ids', 'job_name_guesses'],
+      properties: {
+        customer_id: { type: ['string', 'null'], description: 'Matched customer id from provided customers list, or null' },
+        customer_name_guess: { type: ['string', 'null'], description: 'Customer name as spoken, or null' },
+        date_range_start: { type: ['string', 'null'], description: 'YYYY-MM-DD start of invoice period, or null' },
+        date_range_end: { type: ['string', 'null'], description: 'YYYY-MM-DD end of invoice period, or null' },
+        job_ids: { type: 'array', items: { type: 'string' }, description: 'Matched job ids from provided jobs list' },
+        job_name_guesses: { type: 'array', items: { type: 'string' }, description: 'Job names as spoken' },
       },
     },
     global_warnings: { type: 'array', items: { type: 'string' } },
@@ -135,9 +155,11 @@ Deno.serve(async req => {
     const form = await req.formData();
     const audio = form.get('audio');
     const jobsRaw = form.get('jobs');
+    const customersRaw = form.get('customers');
     const now = String(form.get('now') || new Date().toISOString());
     const timezone = String(form.get('timezone') || 'America/Vancouver');
     const defaultStart = String(form.get('defaultStart') || '08:00');
+    const elapsedSeconds = form.get('elapsedSeconds') ? Number(form.get('elapsedSeconds')) : null;
 
     if (!(audio instanceof File)) {
       return json({ error: 'Missing audio file.' }, 400);
@@ -150,6 +172,7 @@ Deno.serve(async req => {
     if (!Array.isArray(jobs) || jobs.length === 0) {
       return json({ error: 'No jobs were provided for matching.' }, 400);
     }
+    const customers = customersRaw ? JSON.parse(String(customersRaw)) : [];
 
     const transcribeBody = new FormData();
     transcribeBody.append('model', Deno.env.get('OPENAI_TRANSCRIBE_MODEL') || 'gpt-4o-mini-transcribe');
@@ -182,11 +205,11 @@ Deno.serve(async req => {
         input: [
           {
             role: 'system',
-            content: 'Extract all distinct time-entry drafts from a carpenter or contractor voice memo. Return one entry for each job/date/time block mentioned. Pick job_id only from the provided jobs. If one spoken note describes multiple jobs, split it into multiple entries. Do not invent missing hours. Convert dates and times to local user context. Keep each entry notes field focused only on work for that entry.',
+            content: `You process voice memos from contractors and carpenters. First determine intent:\n- "time_entry": the speaker is logging hours worked. Extract one entry per job/date/time block. Pick job_id only from the provided jobs. Do not invent missing hours. Convert dates and times to local user context. Keep each entry notes focused on work for that entry.\n- "invoice_request": the speaker is asking to generate an invoice (e.g. "invoice John Smith", "create an invoice for the kitchen job", "bill ABC Construction"). Extract customer and date range. Match customer_id from provided customers. Match job_ids from provided jobs. Leave entries array empty.\n\nNote: recording_seconds is the length of the voice memo itself, not the hours worked.`,
           },
           {
             role: 'user',
-            content: JSON.stringify({ transcript, jobs, now, timezone, defaultStart }),
+            content: JSON.stringify({ transcript, jobs, customers, now, timezone, defaultStart, ...(elapsedSeconds != null ? { recording_seconds: elapsedSeconds } : {}) }),
           },
         ],
         text: {
@@ -205,8 +228,23 @@ Deno.serve(async req => {
     }
 
     const outputText = getOutputText(extractData);
-    const parsed = JSON.parse(outputText);
-    const parsedEntries = Array.isArray(parsed.entries) ? parsed.entries : [parsed];
+    let parsed: any;
+    try {
+      parsed = JSON.parse(outputText);
+    } catch {
+      return json({ error: 'Could not read AI response. Please try again.' }, 502);
+    }
+
+    if (parsed.intent === 'invoice_request') {
+      return json({
+        intent: 'invoice_request',
+        invoice_request: parsed.invoice_request || null,
+        transcript,
+        global_warnings: parsed.global_warnings || [],
+      });
+    }
+
+    const parsedEntries = Array.isArray(parsed.entries) && parsed.entries.length ? parsed.entries : [parsed];
     const entries = parsedEntries.map((entry: any, index: number) => {
       const draft = buildSession(entry, { now, timezone, defaultStart });
       const warnings = [...(parsed.global_warnings || []), ...draft.warnings];
@@ -223,6 +261,7 @@ Deno.serve(async req => {
     });
 
     return json({
+      intent: 'time_entry',
       entries,
       session: entries[0]?.session,
       assumptions: entries[0]?.assumptions || [],

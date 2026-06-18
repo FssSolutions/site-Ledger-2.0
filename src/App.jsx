@@ -18,6 +18,7 @@ import ExpensesTab from './pages/ExpensesTab.jsx';
 import { useWindowWidth } from './hooks/useWindowWidth.js';
 import AccentColorContext from './lib/AccentColorContext.js';
 import SettingsModal from './components/SettingsModal.jsx';
+import InvoiceModal from './components/InvoiceModal.jsx';
 
 const TABS = [
   { id: 'home', l: 'Home', i: 'home' },
@@ -83,6 +84,7 @@ export default function App() {
   const [taxRate, setTaxRate] = useState(() => parseFloat(localStorage.getItem('sl_tax_rate') || '5'));
   const [reminderTime, setReminderTime] = useState(() => localStorage.getItem('sl_reminder_time') || '');
   const [showSettings, setShowSettings] = useState(false);
+  const [voiceInvoiceRequest, setVoiceInvoiceRequest] = useState(null);
   const reminderFiredRef = useRef('');
 
   useEffect(() => { localStorage.setItem('sl_accent_color', accentColor); }, [accentColor]);
@@ -431,6 +433,7 @@ export default function App() {
       jobs: jobs
         .filter(j => (j.status || 'active') === 'active')
         .map(j => ({ id: j.id, name: j.name, address: j.address || '', status: j.status || 'active' })),
+      customers: customers.map(c => ({ id: c.id, name: c.name })),
       now: new Date().toISOString(),
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Vancouver',
       defaultStart: '08:00',
@@ -608,7 +611,7 @@ export default function App() {
   const tabContent = (
     <>
       {tab === 'home' && <DashboardTab jobs={jobs} employees={employees} sessions={sessions} active={active} breakState={breakState} onGoTo={id => { setTab(id); setShowMore(false); }} isDesktop={isDesktop} />}
-      {tab === 'clock' && <ClockTab jobs={jobs} employees={employees} sessions={sessions} active={active} onIn={clockIn} onOut={clockOut} onPause={pauseTimer} onResume={resumeTimer} breakState={breakState} onSave={saveSession} onDelete={deleteSession} onVoiceProcess={processVoiceEntry} online={online} busy={busy} isDesktop={isDesktop} />}
+      {tab === 'clock' && <ClockTab jobs={jobs} employees={employees} sessions={sessions} active={active} onIn={clockIn} onOut={clockOut} onPause={pauseTimer} onResume={resumeTimer} breakState={breakState} onSave={saveSession} onDelete={deleteSession} onVoiceProcess={processVoiceEntry} onVoiceInvoice={setVoiceInvoiceRequest} online={online} busy={busy} isDesktop={isDesktop} />}
       {tab === 'calendar' && <CalendarTab jobs={jobs} employees={employees} sessions={sessions} onSave={saveSession} onDelete={deleteSession} busy={busy} isDesktop={isDesktop} />}
       {tab === 'mileage' && <MileageTab jobs={jobs} mileage={mileage} onAdd={addMileage} onDelete={deleteMileage} busy={busy} isDesktop={isDesktop} />}
       {tab === 'expenses' && <ExpensesTab jobs={jobs} expenses={expenses} onAdd={addExpense} onDelete={deleteExpense} isDesktop={isDesktop} />}
@@ -639,6 +642,24 @@ export default function App() {
       reminderTime={reminderTime}
       onReminderChange={setReminderTime}
       onClose={() => setShowSettings(false)}
+    />
+  ) : null;
+
+  const voiceInvoiceModal = voiceInvoiceRequest ? (
+    <InvoiceModal
+      sessions={sessions}
+      jobs={jobs}
+      employees={employees}
+      customers={customers}
+      dateRange={[
+        voiceInvoiceRequest.date_range_start ? new Date(voiceInvoiceRequest.date_range_start) : new Date(Date.now() - 14 * 86400000),
+        voiceInvoiceRequest.date_range_end ? new Date(voiceInvoiceRequest.date_range_end) : new Date(),
+      ]}
+      company={company}
+      taxRate={taxRate}
+      voiceRequest={voiceInvoiceRequest}
+      onSaveInvoice={addInvoice}
+      onClose={() => setVoiceInvoiceRequest(null)}
     />
   ) : null;
 
@@ -693,6 +714,7 @@ export default function App() {
           </div>
         </div>
         {settingsModal}
+        {voiceInvoiceModal}
       </div>
       </AccentColorContext.Provider>
     );

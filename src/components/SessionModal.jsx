@@ -37,6 +37,14 @@ export default function SessionModal({ session, initialSession, voiceMeta, date,
     : date ? `${MN[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}` : 'New entry';
   const warnings = voiceMeta?.warnings || [];
   const assumptions = voiceMeta?.assumptions || [];
+  const confidence = voiceMeta?.confidence || null;
+
+  function confDot(score) {
+    if (!confidence || score == null) return null;
+    const color = score >= 0.8 ? '#3BB273' : score >= 0.5 ? '#E67E22' : '#C0392B';
+    const label = score >= 0.8 ? 'High confidence' : score >= 0.5 ? 'Low confidence — verify' : 'Very low confidence — verify';
+    return <span title={label} style={{ display: 'inline-block', width: 7, height: 7, borderRadius: '50%', background: color, marginLeft: 5, verticalAlign: 'middle' }} />;
+  }
 
   return (
     <Modal onClose={onClose}>
@@ -64,7 +72,7 @@ export default function SessionModal({ session, initialSession, voiceMeta, date,
           </div>
         )}
         <div>
-          <label style={lbl}>Job</label>
+          <label style={lbl}>Job{confDot(confidence?.job)}</label>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {jobs.map(j => (
               <button key={j.id} onClick={() => setForm({ ...form, jobId: j.id })}
@@ -89,11 +97,11 @@ export default function SessionModal({ session, initialSession, voiceMeta, date,
           </div>
         )}
         {!isEdit && (
-          <div><label style={lbl}>Date</label><input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} style={inp} /></div>
+          <div><label style={lbl}>Date{confDot(confidence?.date)}</label><input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} style={inp} /></div>
         )}
         <div style={{ display: 'flex', gap: 12 }}>
-          <div style={{ flex: 1 }}><label style={lbl}>Start</label><input type="time" value={form.st} onChange={e => setForm({ ...form, st: e.target.value })} style={inp} /></div>
-          <div style={{ flex: 1 }}><label style={lbl}>End</label><input type="time" value={form.et} onChange={e => setForm({ ...form, et: e.target.value })} style={inp} /></div>
+          <div style={{ flex: 1 }}><label style={lbl}>Start{confDot(confidence?.time)}</label><input type="time" value={form.st} onChange={e => setForm({ ...form, st: e.target.value })} style={inp} /></div>
+          <div style={{ flex: 1 }}><label style={lbl}>End{confDot(confidence?.time)}</label><input type="time" value={form.et} onChange={e => setForm({ ...form, et: e.target.value })} style={inp} /></div>
         </div>
         <div>
           <label style={lbl}>Notes (optional)</label>
