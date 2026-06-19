@@ -785,6 +785,7 @@ export default function App() {
         </button>
       </div>
       {settingsModal}
+      {voiceInvoiceModal}
     </div>
     </AccentColorContext.Provider>
   );

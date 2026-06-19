@@ -56,8 +56,10 @@ export default function ClockTab({ jobs, employees, sessions, active, onIn, onOu
           onProcess={onVoiceProcess}
           onDraft={draft => {
             setShowVoice(false);
-            if (draft.intent === 'invoice_request' && draft.invoice_request && onVoiceInvoice) {
-              onVoiceInvoice(draft.invoice_request);
+            const isInvoice = draft.intent === 'invoice_request' ||
+              /\binvoice\b/i.test(draft.transcript || '');
+            if (isInvoice && onVoiceInvoice) {
+              onVoiceInvoice(draft.invoice_request || {});
               return;
             }
             const entries = Array.isArray(draft.entries) && draft.entries.length ? draft.entries : [draft];
