@@ -116,22 +116,30 @@ export default function InvoiceModal({ sessions, jobs, employees, customers, dat
 
       {activeJobs.length > 0 && (
         <div style={{ marginBottom: 16 }}>
-          <label style={lbl}>Job</label>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+            <label style={{ ...lbl, marginBottom: 0 }}>Jobs to include</label>
+            {selectedJobIds.length > 0 && (
+              <button type="button" onClick={() => setSelectedJobIds([])} style={{ fontSize: 11, color: accent, background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>
+                Clear ({selectedJobIds.length})
+              </button>
+            )}
+          </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {activeJobs.map(j => {
               const isSelected = selectedJobIds.includes(j.id);
               return (
-                <button key={j.id} onClick={() => toggleJob(j.id)}
+                <label key={j.id}
                   style={{ ...card, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', border: isSelected ? `2px solid ${j.color}` : '1px solid #e8e8e8', background: isSelected ? `${j.color}15` : '#fff' }}>
+                  <input type="checkbox" checked={isSelected} onChange={() => toggleJob(j.id)}
+                    style={{ width: 18, height: 18, flexShrink: 0, accentColor: j.color, cursor: 'pointer' }} />
                   <div style={{ width: 10, height: 10, borderRadius: '50%', background: j.color, flexShrink: 0 }} />
                   <span style={{ color: '#333', fontSize: 13, flex: 1, textAlign: 'left' }}>{j.name}</span>
-                  {isSelected && <span style={{ color: j.color, fontSize: 16, fontWeight: 700 }}>&#10003;</span>}
-                </button>
+                </label>
               );
             })}
           </div>
           {selectedJobIds.length === 0 && (
-            <div style={{ color: '#aaa', fontSize: 11, marginTop: 6 }}>No filter — all jobs in range included</div>
+            <div style={{ color: '#aaa', fontSize: 11, marginTop: 6 }}>None checked — all jobs in range will be included. Check one or more to invoice only those jobs.</div>
           )}
         </div>
       )}
