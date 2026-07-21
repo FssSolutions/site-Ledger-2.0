@@ -19,7 +19,7 @@ export default function ReportsTab({ jobs, employees, sessions, mileage, expense
     if (pre === 'month') return [new Date(now.getFullYear(), now.getMonth(), 1), new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999)];
     if (pre === 'lastmonth') { const s = new Date(now.getFullYear(), now.getMonth() - 1, 1), e = new Date(now.getFullYear(), now.getMonth(), 0); e.setHours(23, 59, 59, 999); return [s, e]; }
     if (pre === 'year') return [new Date(now.getFullYear(), 0, 1), now];
-    if (pre === 'custom' && cs && ce) { const e = new Date(ce); e.setHours(23, 59, 59, 999); return [new Date(cs), e]; }
+    if (pre === 'custom' && cs && ce) { return [new Date(cs + 'T00:00:00'), new Date(ce + 'T23:59:59.999')]; }
     return [new Date(0), new Date(8640000000000000)];
   }
 
