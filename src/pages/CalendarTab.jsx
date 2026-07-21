@@ -3,10 +3,10 @@ import SessionModal from '../components/SessionModal.jsx';
 import Icon from '../components/Icon.jsx';
 import { card, ib } from '../styles.js';
 import { MN } from '../lib/constants.js';
-import { fmtDur, fmtCAD, calcEarnings, calcDur, dayKey, calcOvertime } from '../lib/utils.js';
+import { fmtDur, fmtCAD, calcEarnings, calcEffectiveRate, calcDur, dayKey, calcOvertime } from '../lib/utils.js';
 import { useAccentColor } from '../lib/AccentColorContext.js';
 
-export default function CalendarTab({ jobs, employees, sessions, onSave, onDelete, busy, isDesktop }) {
+export default function CalendarTab({ jobs, employees, sessions, company, onSave, onDelete, busy, isDesktop }) {
   const accent = useAccentColor();
   const [vd, setVd] = useState(new Date());
   const [sel, setSel] = useState(null);
@@ -29,8 +29,8 @@ export default function CalendarTab({ jobs, employees, sessions, onSave, onDelet
   const ot = useMemo(() => calcOvertime(sessions), [sessions]);
 
   const ss = sel ? (byDay[dk(sel)] || []) : [];
-  const selEarn = ss.reduce((s, x) => s + calcEarnings(x, jobs, employees), 0);
-  const selBilled = ss.reduce((s, x) => s + calcEarnings(x, jobs), 0);
+  const selEarn = ss.reduce((s, x) => s + calcEarnings(x, jobs, employees, company), 0);
+  const selBilled = ss.reduce((s, x) => s + calcEarnings(x, jobs, [], company), 0);
   const selProfit = selBilled - selEarn;
   const selMs = ss.reduce((s, x) => s + calcDur(x), 0);
   const selOT = sel ? ot.daily[dk(sel)] : null;
@@ -48,7 +48,7 @@ export default function CalendarTab({ jobs, employees, sessions, onSave, onDelet
         <SessionModal
           session={modal === 'add' ? null : modal}
           date={modal === 'add' ? modalDate : null}
-          jobs={jobs} employees={employees}
+          jobs={jobs} employees={employees} company={company}
           onSave={s => { onSave(s, () => setModal(null)); }}
           onClose={() => setModal(null)} busy={busy} />
       )}
@@ -141,8 +141,8 @@ export default function CalendarTab({ jobs, employees, sessions, onSave, onDelet
                 </div>
                 <div style={{ textAlign: 'right', marginRight: 4 }}>
                   {(() => {
-                    const cost = calcEarnings(s, jobs, employees);
-                    const billed = emp ? calcEarnings(s, jobs) : cost;
+                    const cost = calcEarnings(s, jobs, employees, company);
+                    const billed = emp ? calcEarnings(s, jobs, [], company) : cost;
                     const profit = billed - cost;
                     return <>
                       <div style={{ color: '#111', fontSize: 13, fontWeight: 600 }}>{fmtCAD(cost)}</div>
@@ -150,6 +150,9 @@ export default function CalendarTab({ jobs, employees, sessions, onSave, onDelet
                         <div style={{ color: profit >= 0 ? '#1e8449' : '#C0392B', fontSize: 11, fontWeight: 600 }}>
                           {profit >= 0 ? '+' : ''}{fmtCAD(profit)}
                         </div>
+                      )}
+                      {j?.pricing_type === 'fixed' && s.end_time && (
+                        <div style={{ color: '#aaa', fontSize: 11 }}>≈ {fmtCAD(calcEffectiveRate(s, jobs, employees, company))}/hr</div>
                       )}
                     </>;
                   })()}

@@ -236,6 +236,17 @@ export default function CompanyTab({ employees, onAddEmp, onUpdateEmp, onDeleteE
               </div>
 
               <div>
+                <label style={lbl}>Half Day Rate (CAD)</label>
+                <input style={inp} type="number" min="0" step="0.01" value={compForm.halfDayRate || ''} onChange={e => setCompForm(p => ({ ...p, halfDayRate: e.target.value }))} placeholder="e.g. 400" />
+                <div style={{ color: '#bbb', fontSize: 11, marginTop: 6 }}>Default rate for fixed-price jobs. Can be overridden per job.</div>
+              </div>
+
+              <div>
+                <label style={lbl}>Full Day Rate (CAD)</label>
+                <input style={inp} type="number" min="0" step="0.01" value={compForm.fullDayRate || ''} onChange={e => setCompForm(p => ({ ...p, fullDayRate: e.target.value }))} placeholder="e.g. 750" />
+              </div>
+
+              <div>
                 <label style={lbl}>GST Number</label>
                 <input style={inp} value={compForm.gstNumber || ''} onChange={e => setCompForm(p => ({ ...p, gstNumber: e.target.value }))} placeholder="e.g. 123456789 RT0001" />
               </div>

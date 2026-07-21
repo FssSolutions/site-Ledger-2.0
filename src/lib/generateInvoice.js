@@ -93,18 +93,22 @@ export default function generateInvoice({ sessions, jobs, employees, dateRange, 
     const j = jobs.find(x => x.id === s.job_id);
     const emp = employees.find(x => x.id === s.employee_id);
     const hrs = (calcDur(s) / 3600000).toFixed(2);
-    const earn = calcEarnings(s, jobs, employees);
+    const earn = calcEarnings(s, jobs, employees, company);
+    const isFixed = j?.pricing_type === 'fixed';
+    const rateLabel = isFixed
+      ? (s.day_type === 'half' ? 'Half Day' : s.day_type === 'full' ? 'Full Day' : '—')
+      : fmtCAD(j?.rate || 0) + '/hr';
     return [
       new Date(s.start_time).toLocaleDateString('en-CA'),
       j?.name || '',
       emp?.name || 'Owner',
       hrs,
-      fmtCAD(j?.rate || 0) + '/hr',
+      rateLabel,
       fmtCAD(earn)
     ];
   });
 
-  const subtotal = f.reduce((s, x) => s + calcEarnings(x, jobs, employees), 0);
+  const subtotal = f.reduce((s, x) => s + calcEarnings(x, jobs, employees, company), 0);
   const totalHours = (f.reduce((s, x) => s + calcDur(x), 0) / 3600000).toFixed(2);
 
   if (labourRows.length > 0) {

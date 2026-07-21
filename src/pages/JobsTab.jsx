@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import Icon from '../components/Icon.jsx';
 import { card, ib, inp, lbl } from '../styles.js';
 import { JOB_COLORS } from '../lib/constants.js';
-import { fmtCAD, calcDur } from '../lib/utils.js';
+import { fmtCAD, calcDur, calcEarnings } from '../lib/utils.js';
 import { useAccentColor } from '../lib/AccentColorContext.js';
 
 function Swatches({ ci, setCi }) {
@@ -19,13 +19,15 @@ function Swatches({ ci, setCi }) {
 const STATUS_OPTS = ['active', 'complete', 'archived'];
 const STATUS_LABELS = { active: 'Active', complete: 'Complete', archived: 'Archived' };
 const STATUS_COLORS = { active: '#3BB273', complete: '#2E86AB', archived: '#aaa' };
+const PRICING_OPTS = ['hourly', 'fixed'];
+const PRICING_LABELS = { hourly: 'Hourly', fixed: 'Fixed Price' };
 
-export default function JobsTab({ jobs, sessions, onAdd, onUpdate, onDelete, isDesktop }) {
+export default function JobsTab({ jobs, sessions, company, onAdd, onUpdate, onDelete, isDesktop }) {
   const accent = useAccentColor();
   const [statusFilter, setStatusFilter] = useState('active');
   const [showAdd, setShowAdd] = useState(false);
   const [editId, setEditId] = useState(null);
-  const [form, setForm] = useState({ name: '', rate: '', notes: '', address: '', status: 'active', budget_hours: '', budget_cost: '' });
+  const [form, setForm] = useState({ name: '', rate: '', pricing_type: 'hourly', half_day_rate: '', full_day_rate: '', notes: '', address: '', status: 'active', budget_hours: '', budget_cost: '' });
   const [ci, setCi] = useState(0);
 
   const jobMs = useMemo(() => {
@@ -38,10 +40,10 @@ export default function JobsTab({ jobs, sessions, onAdd, onUpdate, onDelete, isD
     const m = {};
     sessions.forEach(s => {
       const job = jobs.find(j => j.id === s.job_id);
-      if (job) m[s.job_id] = (m[s.job_id] || 0) + (calcDur(s) / 3600000) * job.rate;
+      if (job) m[s.job_id] = (m[s.job_id] || 0) + calcEarnings(s, jobs, [], company);
     });
     return m;
-  }, [sessions, jobs]);
+  }, [sessions, jobs, company]);
 
   const filtered = statusFilter === 'all' ? jobs : jobs.filter(j => (j.status || 'active') === statusFilter);
 
@@ -72,7 +74,27 @@ export default function JobsTab({ jobs, sessions, onAdd, onUpdate, onDelete, isD
             {editId === job.id ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Job name" style={inp} />
-                <input type="number" value={form.rate} onChange={e => setForm({ ...form, rate: e.target.value })} placeholder="Rate (CAD/hr)" style={inp} />
+                <div>
+                  <label style={lbl}>Pricing</label>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    {PRICING_OPTS.map(p => (
+                      <button key={p} onClick={() => setForm({ ...form, pricing_type: p })}
+                        style={{ padding: '6px 14px', borderRadius: 20, border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                          background: form.pricing_type === p ? accent : '#f0f0f0',
+                          color: form.pricing_type === p ? '#fff' : '#888' }}>
+                        {PRICING_LABELS[p]}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {form.pricing_type === 'hourly' ? (
+                  <input type="number" value={form.rate} onChange={e => setForm({ ...form, rate: e.target.value })} placeholder="Rate (CAD/hr)" style={inp} />
+                ) : (
+                  <>
+                    <div><label style={lbl}>Half Day Rate (optional override)</label><input type="number" min="0" step="0.01" value={form.half_day_rate} onChange={e => setForm({ ...form, half_day_rate: e.target.value })} placeholder={company?.halfDayRate ? `Company default: ${fmtCAD(company.halfDayRate)}` : 'e.g. 400'} style={inp} /></div>
+                    <div><label style={lbl}>Full Day Rate (optional override)</label><input type="number" min="0" step="0.01" value={form.full_day_rate} onChange={e => setForm({ ...form, full_day_rate: e.target.value })} placeholder={company?.fullDayRate ? `Company default: ${fmtCAD(company.fullDayRate)}` : 'e.g. 750'} style={inp} /></div>
+                  </>
+                )}
                 <div><label style={lbl}>Budget Hours (optional)</label><input type="number" min="0" step="0.5" value={form.budget_hours} onChange={e => setForm({ ...form, budget_hours: e.target.value })} placeholder="e.g. 40" style={inp} /></div>
                 <div><label style={lbl}>Budget Cost (optional)</label><input type="number" min="0" step="0.01" value={form.budget_cost} onChange={e => setForm({ ...form, budget_cost: e.target.value })} placeholder="e.g. 2500" style={inp} /></div>
                 <div><label style={lbl}>Address (optional)</label><input value={form.address} onChange={e => setForm({ ...form, address: e.target.value })} placeholder="123 Main St, Vancouver, BC" style={inp} /></div>
@@ -92,7 +114,7 @@ export default function JobsTab({ jobs, sessions, onAdd, onUpdate, onDelete, isD
                 </div>
                 <Swatches ci={ci} setCi={setCi} />
                 <div style={{ display: 'flex', gap: 8 }}>
-                  <button onClick={() => { onUpdate({ ...job, name: form.name, rate: parseFloat(form.rate), color: JOB_COLORS[ci % JOB_COLORS.length], notes: form.notes, address: form.address, status: form.status, budget_hours: form.budget_hours ? parseFloat(form.budget_hours) : null, budget_cost: form.budget_cost ? parseFloat(form.budget_cost) : null }); setEditId(null); }}
+                  <button onClick={() => { onUpdate({ ...job, name: form.name, rate: form.pricing_type === 'fixed' ? 0 : parseFloat(form.rate), pricing_type: form.pricing_type, half_day_rate: form.half_day_rate ? parseFloat(form.half_day_rate) : null, full_day_rate: form.full_day_rate ? parseFloat(form.full_day_rate) : null, color: JOB_COLORS[ci % JOB_COLORS.length], notes: form.notes, address: form.address, status: form.status, budget_hours: form.budget_hours ? parseFloat(form.budget_hours) : null, budget_cost: form.budget_cost ? parseFloat(form.budget_cost) : null }); setEditId(null); }}
                     style={{ flex: 1, padding: '10px', borderRadius: 8, border: 'none', background: accent, color: '#fff', fontWeight: 700, cursor: 'pointer' }}>Save</button>
                   <button onClick={() => setEditId(null)} style={{ padding: '10px 14px', borderRadius: 8, border: '1px solid #e0e0e0', background: 'transparent', color: '#888', cursor: 'pointer' }}>Cancel</button>
                 </div>
@@ -110,9 +132,13 @@ export default function JobsTab({ jobs, sessions, onAdd, onUpdate, onDelete, isD
                         {STATUS_LABELS[job.status || 'active']}
                       </span>
                     </div>
-                    <div style={{ color: '#999', fontSize: 12 }}>{fmtCAD(job.rate)}/hr</div>
+                    <div style={{ color: '#999', fontSize: 12 }}>
+                      {job.pricing_type === 'fixed'
+                        ? `Fixed — ${fmtCAD(job.half_day_rate ?? company?.halfDayRate)}/half · ${fmtCAD(job.full_day_rate ?? company?.fullDayRate)}/full`
+                        : `${fmtCAD(job.rate)}/hr`}
+                    </div>
                   </div>
-                  <button onClick={() => { setEditId(job.id); setForm({ name: job.name, rate: String(job.rate), notes: job.notes || '', address: job.address || '', status: job.status || 'active', budget_hours: job.budget_hours ? String(job.budget_hours) : '', budget_cost: job.budget_cost ? String(job.budget_cost) : '' }); setCi(JOB_COLORS.indexOf(job.color) || 0); }} style={{ ...ib, color: '#aaa', marginRight: 4 }}><Icon name="edit" size={15} /></button>
+                  <button onClick={() => { setEditId(job.id); setForm({ name: job.name, rate: String(job.rate), pricing_type: job.pricing_type || 'hourly', half_day_rate: job.half_day_rate ? String(job.half_day_rate) : '', full_day_rate: job.full_day_rate ? String(job.full_day_rate) : '', notes: job.notes || '', address: job.address || '', status: job.status || 'active', budget_hours: job.budget_hours ? String(job.budget_hours) : '', budget_cost: job.budget_cost ? String(job.budget_cost) : '' }); setCi(JOB_COLORS.indexOf(job.color) || 0); }} style={{ ...ib, color: '#aaa', marginRight: 4 }}><Icon name="edit" size={15} /></button>
                   <button onClick={() => { if (confirm('Delete this job?')) onDelete(job.id); }} style={{ ...ib, color: '#e74c3c' }}><Icon name="trash" size={15} /></button>
                 </div>
                 {job.address && <div style={{ color: '#888', fontSize: 12, marginTop: 6, paddingLeft: 24 }}>{job.address}</div>}
@@ -158,21 +184,41 @@ export default function JobsTab({ jobs, sessions, onAdd, onUpdate, onDelete, isD
           <div style={{ ...card, padding: '16px 18px' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Job name" style={inp} />
-              <input type="number" value={form.rate} onChange={e => setForm({ ...form, rate: e.target.value })} placeholder="Hourly rate (CAD)" style={inp} />
+              <div>
+                <label style={lbl}>Pricing</label>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  {PRICING_OPTS.map(p => (
+                    <button key={p} onClick={() => setForm({ ...form, pricing_type: p })}
+                      style={{ padding: '6px 14px', borderRadius: 20, border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                        background: form.pricing_type === p ? accent : '#f0f0f0',
+                        color: form.pricing_type === p ? '#fff' : '#888' }}>
+                      {PRICING_LABELS[p]}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {form.pricing_type === 'hourly' ? (
+                <input type="number" value={form.rate} onChange={e => setForm({ ...form, rate: e.target.value })} placeholder="Hourly rate (CAD)" style={inp} />
+              ) : (
+                <>
+                  <div><label style={lbl}>Half Day Rate (optional override)</label><input type="number" min="0" step="0.01" value={form.half_day_rate} onChange={e => setForm({ ...form, half_day_rate: e.target.value })} placeholder={company?.halfDayRate ? `Company default: ${fmtCAD(company.halfDayRate)}` : 'e.g. 400'} style={inp} /></div>
+                  <div><label style={lbl}>Full Day Rate (optional override)</label><input type="number" min="0" step="0.01" value={form.full_day_rate} onChange={e => setForm({ ...form, full_day_rate: e.target.value })} placeholder={company?.fullDayRate ? `Company default: ${fmtCAD(company.fullDayRate)}` : 'e.g. 750'} style={inp} /></div>
+                </>
+              )}
               <div><label style={lbl}>Budget Hours (optional)</label><input type="number" min="0" step="0.5" value={form.budget_hours} onChange={e => setForm({ ...form, budget_hours: e.target.value })} placeholder="e.g. 40" style={inp} /></div>
               <div><label style={lbl}>Budget Cost (optional)</label><input type="number" min="0" step="0.01" value={form.budget_cost} onChange={e => setForm({ ...form, budget_cost: e.target.value })} placeholder="e.g. 2500" style={inp} /></div>
               <div><label style={lbl}>Address (optional)</label><input value={form.address} onChange={e => setForm({ ...form, address: e.target.value })} placeholder="123 Main St, Vancouver, BC" style={inp} /></div>
               <div><label style={lbl}>Notes (optional)</label><textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} placeholder="Contact, scope of work..." style={{ ...inp, height: 80, resize: 'vertical' }} /></div>
               <Swatches ci={ci} setCi={setCi} />
               <div style={{ display: 'flex', gap: 8 }}>
-                <button onClick={() => { if (!form.name || !form.rate) return; onAdd({ name: form.name, rate: parseFloat(form.rate), color: JOB_COLORS[ci % JOB_COLORS.length], notes: form.notes, address: form.address, status: 'active', budget_hours: form.budget_hours ? parseFloat(form.budget_hours) : null, budget_cost: form.budget_cost ? parseFloat(form.budget_cost) : null }); setForm({ name: '', rate: '', notes: '', address: '', status: 'active', budget_hours: '', budget_cost: '' }); setShowAdd(false); }}
+                <button onClick={() => { if (!form.name || (form.pricing_type === 'hourly' && !form.rate)) return; onAdd({ name: form.name, rate: form.pricing_type === 'fixed' ? 0 : parseFloat(form.rate), pricing_type: form.pricing_type, half_day_rate: form.half_day_rate ? parseFloat(form.half_day_rate) : null, full_day_rate: form.full_day_rate ? parseFloat(form.full_day_rate) : null, color: JOB_COLORS[ci % JOB_COLORS.length], notes: form.notes, address: form.address, status: 'active', budget_hours: form.budget_hours ? parseFloat(form.budget_hours) : null, budget_cost: form.budget_cost ? parseFloat(form.budget_cost) : null }); setForm({ name: '', rate: '', pricing_type: 'hourly', half_day_rate: '', full_day_rate: '', notes: '', address: '', status: 'active', budget_hours: '', budget_cost: '' }); setShowAdd(false); }}
                   style={{ flex: 1, padding: '10px', borderRadius: 8, border: 'none', background: accent, color: '#fff', fontWeight: 700, cursor: 'pointer' }}>Add Job</button>
                 <button onClick={() => setShowAdd(false)} style={{ padding: '10px 14px', borderRadius: 8, border: '1px solid #e0e0e0', background: 'transparent', color: '#888', cursor: 'pointer' }}>Cancel</button>
               </div>
             </div>
           </div>
         ) : (
-          <button onClick={() => { setShowAdd(true); setForm({ name: '', rate: '', notes: '', address: '', status: 'active', budget_hours: '', budget_cost: '' }); }}
+          <button onClick={() => { setShowAdd(true); setForm({ name: '', rate: '', pricing_type: 'hourly', half_day_rate: '', full_day_rate: '', notes: '', address: '', status: 'active', budget_hours: '', budget_cost: '' }); }}
             style={{ width: '100%', padding: '14px', borderRadius: 12, border: '1px dashed #ddd', background: 'transparent', color: '#888', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
             <Icon name="plus" size={14} /> New Job
           </button>

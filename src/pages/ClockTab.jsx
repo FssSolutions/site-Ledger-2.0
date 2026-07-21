@@ -3,9 +3,9 @@ import SessionModal from '../components/SessionModal.jsx';
 import VoiceEntryModal from '../components/VoiceEntryModal.jsx';
 import Icon from '../components/Icon.jsx';
 import { card, ib, inp, lbl } from '../styles.js';
-import { fmtDur, fmtCAD, calcEarnings, calcDur } from '../lib/utils.js';
+import { fmtDur, fmtCAD, calcEarnings, calcEffectiveRate, calcDur } from '../lib/utils.js';
 
-export default function ClockTab({ jobs, employees, sessions, active, onIn, onOut, onPause, onResume, breakState, onSave, onDelete, onVoiceProcess, onVoiceInvoice, online, busy, isDesktop }) {
+export default function ClockTab({ jobs, employees, sessions, company, active, onIn, onOut, onPause, onResume, breakState, onSave, onDelete, onVoiceProcess, onVoiceInvoice, online, busy, isDesktop }) {
   const activeJobs = jobs.filter(j => (j.status || 'active') === 'active');
   const [selJob, setSelJob] = useState(activeJobs[0]?.id || '');
   const [selEmp, setSelEmp] = useState('');
@@ -14,9 +14,11 @@ export default function ClockTab({ jobs, employees, sessions, active, onIn, onOu
   const [showVoice, setShowVoice] = useState(false);
   const [voiceDrafts, setVoiceDrafts] = useState([]);
   const [staleEndTime, setStaleEndTime] = useState('');
+  const [dayType, setDayType] = useState('');
 
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
   useEffect(() => { if (activeJobs.length && !selJob) setSelJob(activeJobs[0].id); }, [jobs]);
+  useEffect(() => { setDayType(''); }, [active?.id]);
 
   const isStale = !!active && new Date(active.start_time).toDateString() !== new Date().toDateString();
 
@@ -35,7 +37,7 @@ export default function ClockTab({ jobs, employees, sessions, active, onIn, onOu
   const elapsed = active ? Math.max(0, effectiveNow - new Date(active.start_time) - (breakState?.totalBreakMs || 0)) : 0;
   const currentBreakMs = isPaused ? now - breakState.pausedAt : 0;
   const today = sessions.filter(s => new Date(s.start_time).toDateString() === new Date().toDateString());
-  const todayEarn = today.reduce((s, x) => s + calcEarnings(x, jobs, employees), 0);
+  const todayEarn = today.reduce((s, x) => s + calcEarnings(x, jobs, employees, company), 0);
   const todayMs = today.reduce((s, x) => s + calcDur(x), 0);
   const todayHrs = isStale ? todayMs / 3600000 : (todayMs + elapsed) / 3600000;
   const dailyOT = Math.max(0, todayHrs - 8);
@@ -45,7 +47,7 @@ export default function ClockTab({ jobs, employees, sessions, active, onIn, onOu
   return (
     <div style={{ padding: isDesktop ? '0 0 24px' : '0 0 100px' }}>
       {editSess && (
-        <SessionModal session={editSess} jobs={jobs} employees={employees}
+        <SessionModal session={editSess} jobs={jobs} employees={employees} company={company}
           onSave={s => { onSave(s); setEditSess(null); }}
           onClose={() => setEditSess(null)} busy={busy} />
       )}
@@ -82,6 +84,7 @@ export default function ClockTab({ jobs, employees, sessions, active, onIn, onOu
           }}
           jobs={jobs}
           employees={employees}
+          company={company}
           onSave={s => {
             const sStart = s.start_time ? new Date(s.start_time) : null;
             const sEnd = s.end_time ? new Date(s.end_time) : null;
@@ -148,6 +151,14 @@ export default function ClockTab({ jobs, employees, sessions, active, onIn, onOu
           <div style={{ fontSize: 36, fontFamily: "'DM Mono', monospace", color: isPaused ? '#aaa' : aJob?.color, fontWeight: 600 }}>{fmtDur(elapsed)}</div>
           {isPaused
             ? <div style={{ color: '#c8860b', fontSize: 13, marginTop: 4, fontFamily: "'DM Mono', monospace" }}>break {fmtDur(currentBreakMs)}</div>
+            : aJob?.pricing_type === 'fixed'
+            ? (dayType
+                ? (() => {
+                    const rate = dayType === 'half' ? (aJob.half_day_rate ?? company?.halfDayRate) : (aJob.full_day_rate ?? company?.fullDayRate);
+                    const hrs = elapsed / 3600000;
+                    return <div style={{ color: '#888', fontSize: 13, marginTop: 4 }}>{fmtCAD(rate)} {dayType === 'half' ? 'half day' : 'full day'} · ≈ {fmtCAD(hrs ? rate / hrs : 0)}/hr so far</div>;
+                  })()
+                : <div style={{ color: '#888', fontSize: 13, marginTop: 4 }}>Fixed price — pick Half or Full Day when you clock out</div>)
             : <div style={{ color: '#888', fontSize: 13, marginTop: 4 }}>≈ {fmtCAD((elapsed / 3600000) * (active?.employee_id ? (employees.find(e => e.id === active.employee_id)?.rate || aJob?.rate || 0) : (aJob?.rate || 0)))}</div>
           }
         </div>
@@ -162,9 +173,19 @@ export default function ClockTab({ jobs, employees, sessions, active, onIn, onOu
           <input type="datetime-local" value={staleEndTime} onChange={e => setStaleEndTime(e.target.value)}
             max={new Date(now).toISOString().slice(0, 16)}
             style={{ ...inp, marginBottom: 10 }} />
+          {aJob?.pricing_type === 'fixed' && (
+            <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+              {['half', 'full'].map(d => (
+                <button key={d} onClick={() => setDayType(d)}
+                  style={{ flex: 1, padding: '10px', borderRadius: 10, border: 'none', fontSize: 13, fontWeight: 700, cursor: 'pointer', background: dayType === d ? (aJob.color || '#E67E22') : '#f0f0f0', color: dayType === d ? '#fff' : '#888' }}>
+                  {d === 'half' ? 'Half Day' : 'Full Day'}
+                </button>
+              ))}
+            </div>
+          )}
           <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={() => staleEndTime && onOut(new Date(staleEndTime).toISOString())} disabled={!staleEndTime || busy}
-              style={{ flex: 1, padding: '12px', borderRadius: 10, border: 'none', background: '#E67E22', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', opacity: !staleEndTime || busy ? 0.5 : 1 }}>
+            <button onClick={() => staleEndTime && onOut(new Date(staleEndTime).toISOString(), dayType || null)} disabled={!staleEndTime || busy || (aJob?.pricing_type === 'fixed' && !dayType)}
+              style={{ flex: 1, padding: '12px', borderRadius: 10, border: 'none', background: '#E67E22', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', opacity: !staleEndTime || busy || (aJob?.pricing_type === 'fixed' && !dayType) ? 0.5 : 1 }}>
               {busy ? 'Saving...' : 'Save Clock-Out'}
             </button>
             <button onClick={() => { if (confirm('Delete this session?')) onDelete(active.id); }}
@@ -219,8 +240,18 @@ export default function ClockTab({ jobs, employees, sessions, active, onIn, onOu
                   <Icon name="pause" size={14} /> Take a Break
                 </button>
             )}
-            <button onClick={() => onOut()} disabled={busy}
-              style={{ width: '100%', padding: '14px', borderRadius: 12, border: '2px solid #e8c6c6', background: '#fde8e8', color: '#c0392b', fontSize: 15, fontWeight: 700, fontFamily: "'Syne', sans-serif", cursor: 'pointer', opacity: busy ? 0.6 : 1 }}>
+            {!isStale && aJob?.pricing_type === 'fixed' && (
+              <div style={{ display: 'flex', gap: 8 }}>
+                {['half', 'full'].map(d => (
+                  <button key={d} onClick={() => setDayType(d)}
+                    style={{ flex: 1, padding: '12px', borderRadius: 10, border: 'none', fontSize: 13, fontWeight: 700, cursor: 'pointer', background: dayType === d ? (aJob.color || '#E8651A') : '#f0f0f0', color: dayType === d ? '#fff' : '#888' }}>
+                    {d === 'half' ? 'Half Day' : 'Full Day'}
+                  </button>
+                ))}
+              </div>
+            )}
+            <button onClick={() => onOut(null, dayType || null)} disabled={busy || (!isStale && aJob?.pricing_type === 'fixed' && !dayType)}
+              style={{ width: '100%', padding: '14px', borderRadius: 12, border: '2px solid #e8c6c6', background: '#fde8e8', color: '#c0392b', fontSize: 15, fontWeight: 700, fontFamily: "'Syne', sans-serif", cursor: 'pointer', opacity: busy || (!isStale && aJob?.pricing_type === 'fixed' && !dayType) ? 0.6 : 1 }}>
               {busy ? 'Saving...' : isStale ? 'Clock Out Now' : 'Clock Out'}
             </button>
           </div>
@@ -243,7 +274,12 @@ export default function ClockTab({ jobs, employees, sessions, active, onIn, onOu
                   <div style={{ color: '#aaa', fontSize: 12 }}>{new Date(s.start_time).toLocaleDateString('en-CA')} · {fmtDur(calcDur(s))}</div>
                   {s.notes && <div style={{ color: '#bbb', fontSize: 11, marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 200 }}>{s.notes}</div>}
                 </div>
-                <div style={{ color: '#111', fontSize: 13, fontWeight: 600, marginRight: 4 }}>{fmtCAD(calcEarnings(s, jobs, employees))}</div>
+                <div style={{ textAlign: 'right', marginRight: 4 }}>
+                  <div style={{ color: '#111', fontSize: 13, fontWeight: 600 }}>{fmtCAD(calcEarnings(s, jobs, employees, company))}</div>
+                  {j?.pricing_type === 'fixed' && s.end_time && (
+                    <div style={{ color: '#aaa', fontSize: 11 }}>≈ {fmtCAD(calcEffectiveRate(s, jobs, employees, company))}/hr</div>
+                  )}
+                </div>
                 <button onClick={() => setEditSess(s)} style={ib}><Icon name="edit" size={14} /></button>
                 <button onClick={() => { if (confirm('Delete this entry?')) onDelete(s.id); }} style={{ ...ib, color: '#e74c3c' }}><Icon name="trash" size={14} /></button>
               </div>

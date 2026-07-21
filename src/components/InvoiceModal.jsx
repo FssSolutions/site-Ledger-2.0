@@ -49,7 +49,7 @@ export default function InvoiceModal({ sessions, jobs, employees, customers, dat
     () => activeSessions.filter(s => selectedJobIds.length === 0 || selectedJobIds.includes(s.job_id)),
     [activeSessions, selectedJobIds]
   );
-  const subtotal = useMemo(() => billSessions.reduce((s, x) => s + calcEarnings(x, jobs, employees), 0), [billSessions, jobs, employees]);
+  const subtotal = useMemo(() => billSessions.reduce((s, x) => s + calcEarnings(x, jobs, employees, company), 0), [billSessions, jobs, employees, company]);
   const total = subtotal + subtotal * (taxRate / 100);
 
   function toggleJob(id) {

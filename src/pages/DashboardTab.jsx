@@ -4,7 +4,7 @@ import { card } from '../styles.js';
 import { fmtDur, fmtCAD, calcEarnings, calcDur, dayKey } from '../lib/utils.js';
 import { useAccentColor } from '../lib/AccentColorContext.js';
 
-export default function DashboardTab({ jobs, employees, sessions, active, breakState, onGoTo, isDesktop }) {
+export default function DashboardTab({ jobs, employees, sessions, company, active, breakState, onGoTo, isDesktop }) {
   const accent = useAccentColor();
   const [tick, setTick] = useState(0);
 
@@ -26,9 +26,9 @@ export default function DashboardTab({ jobs, employees, sessions, active, breakS
   const monthSessions = useMemo(() => sessions.filter(s => new Date(s.start_time).getTime() >= monthStartMs), [sessions, monthStartMs]);
 
   const todayMs = todaySessions.reduce((a, s) => a + calcDur(s), 0);
-  const todayEarn = todaySessions.reduce((a, s) => a + calcEarnings(s, jobs, employees), 0);
+  const todayEarn = todaySessions.reduce((a, s) => a + calcEarnings(s, jobs, employees, company), 0);
   const weekMs = weekSessions.reduce((a, s) => a + calcDur(s), 0);
-  const weekEarn = weekSessions.reduce((a, s) => a + calcEarnings(s, jobs, employees), 0);
+  const weekEarn = weekSessions.reduce((a, s) => a + calcEarnings(s, jobs, employees, company), 0);
 
   const activeElapsed = active ? (() => {
     const start = new Date(active.start_time).getTime();
@@ -50,8 +50,8 @@ export default function DashboardTab({ jobs, employees, sessions, active, breakS
   const topJobsMax = topJobs[0]?.ms || 1;
 
   const hasEmployees = employees.length > 0;
-  const monthBilled = monthSessions.reduce((a, s) => a + calcEarnings(s, jobs), 0);
-  const monthLabour = monthSessions.reduce((a, s) => a + calcEarnings(s, jobs, employees), 0);
+  const monthBilled = monthSessions.reduce((a, s) => a + calcEarnings(s, jobs, [], company), 0);
+  const monthLabour = monthSessions.reduce((a, s) => a + calcEarnings(s, jobs, employees, company), 0);
   const monthProfit = monthBilled - monthLabour;
 
   const recent = useMemo(() => [...sessions].sort((a, b) => new Date(b.start_time) - new Date(a.start_time)).slice(0, 3), [sessions]);
@@ -175,7 +175,7 @@ export default function DashboardTab({ jobs, employees, sessions, active, breakS
                     {new Date(s.start_time).toLocaleDateString('en-CA', { month: 'short', day: 'numeric' })} · {fmtDur(calcDur(s))}
                   </div>
                 </div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: '#111', flexShrink: 0 }}>{fmtCAD(calcEarnings(s, jobs, employees))}</div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: '#111', flexShrink: 0 }}>{fmtCAD(calcEarnings(s, jobs, employees, company))}</div>
               </div>
             );
           })}

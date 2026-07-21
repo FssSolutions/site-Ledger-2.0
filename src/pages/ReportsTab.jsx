@@ -27,13 +27,13 @@ export default function ReportsTab({ jobs, employees, sessions, mileage, expense
   const f = sessions.filter(s => { const t = new Date(s.start_time); return t >= rs && t <= re && s.end_time; });
   const fm = mileage.filter(m => { const t = new Date(m.date); return t >= rs && t <= re; });
   const fe = (expenses || []).filter(e => { const t = new Date(e.date); return t >= rs && t <= re; });
-  const te = f.reduce((s, x) => s + calcEarnings(x, jobs, employees), 0);
+  const te = f.reduce((s, x) => s + calcEarnings(x, jobs, employees, company), 0);
   const totalExp = fe.reduce((s, x) => s + Number(x.amount), 0);
   const netProfit = te - totalExp;
   const tm = f.reduce((s, x) => s + calcDur(x), 0);
   const totalKm = fm.reduce((s, x) => s + Number(x.km), 0);
-  const bj = jobs.map(j => { const js = f.filter(s => s.job_id === j.id); return { ...j, e: js.reduce((s, x) => s + calcEarnings(x, jobs, employees), 0), h: js.reduce((s, x) => s + calcDur(x), 0), n: js.length }; }).filter(j => j.n > 0).sort((a, b) => b.e - a.e);
-  const be = employees.map(e => { const es = f.filter(s => s.employee_id === e.id); const hrs = es.reduce((s, x) => s + calcDur(x), 0) / 3600000; const cost = hrs * e.rate; const billed = es.reduce((s, x) => s + calcEarnings(x, jobs), 0); return { ...e, hrs, cost, billed, profit: billed - cost, n: es.length }; }).filter(e => e.n > 0).sort((a, b) => b.hrs - a.hrs);
+  const bj = jobs.map(j => { const js = f.filter(s => s.job_id === j.id); return { ...j, e: js.reduce((s, x) => s + calcEarnings(x, jobs, employees, company), 0), h: js.reduce((s, x) => s + calcDur(x), 0), n: js.length }; }).filter(j => j.n > 0).sort((a, b) => b.e - a.e);
+  const be = employees.map(e => { const es = f.filter(s => s.employee_id === e.id); const hrs = es.reduce((s, x) => s + calcDur(x), 0) / 3600000; const cost = hrs * e.rate; const billed = es.reduce((s, x) => s + calcEarnings(x, jobs, [], company), 0); return { ...e, hrs, cost, billed, profit: billed - cost, n: es.length }; }).filter(e => e.n > 0).sort((a, b) => b.hrs - a.hrs);
 
   // Overtime calculations
   const ot = calcOvertime(f);
@@ -57,7 +57,7 @@ export default function ReportsTab({ jobs, employees, sessions, mileage, expense
     f.forEach(s => {
       const j = jobs.find(x => x.id === s.job_id);
       const emp = employees.find(x => x.id === s.employee_id);
-      rows.push([new Date(s.start_time).toLocaleDateString('en-CA'), j?.name || '', emp?.name || 'Owner', new Date(s.start_time).toLocaleTimeString('en-CA'), new Date(s.end_time).toLocaleTimeString('en-CA'), (calcDur(s) / 3600000).toFixed(2), calcEarnings(s, jobs, employees).toFixed(2)]);
+      rows.push([new Date(s.start_time).toLocaleDateString('en-CA'), j?.name || '', emp?.name || 'Owner', new Date(s.start_time).toLocaleTimeString('en-CA'), new Date(s.end_time).toLocaleTimeString('en-CA'), (calcDur(s) / 3600000).toFixed(2), calcEarnings(s, jobs, employees, company).toFixed(2)]);
     });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([rows.map(r => r.join(',')).join('\n')], { type: 'text/csv' }));

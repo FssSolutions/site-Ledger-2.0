@@ -39,6 +39,8 @@ function companyToDb(d) {
     name: d.name || null, phone: d.phone || null, email: d.email || null,
     address: d.address || null, gst_number: d.gstNumber || null,
     worksafe_number: d.worksafeNumber || null, logo: d.logo || null,
+    half_day_rate: d.halfDayRate ? parseFloat(d.halfDayRate) : null,
+    full_day_rate: d.fullDayRate ? parseFloat(d.fullDayRate) : null,
   };
 }
 
@@ -47,6 +49,7 @@ function companyFromDb(r) {
     id: r.id, name: r.name || '', phone: r.phone || '', email: r.email || '',
     address: r.address || '', gstNumber: r.gst_number || '',
     worksafeNumber: r.worksafe_number || '', logo: r.logo || '',
+    halfDayRate: r.half_day_rate ?? '', fullDayRate: r.full_day_rate ?? '',
   };
 }
 
@@ -349,7 +352,7 @@ export default function App() {
     setBusy(false);
   }
 
-  async function clockOut(customEndTime) {
+  async function clockOut(customEndTime, dayType) {
     if (!active) return;
     let endTime;
     if (customEndTime) {
@@ -359,23 +362,24 @@ export default function App() {
       endTime = new Date(effectiveNow - breakState.totalBreakMs).toISOString();
     }
     setBreakState({ pausedAt: null, totalBreakMs: 0 });
+    const patch = { end_time: endTime, day_type: dayType || null };
 
     if (active.id?.toString().startsWith('temp-')) {
-      enqueue({ type: 'insert', table: 'sessions', body: { ...active, end_time: endTime } });
+      enqueue({ type: 'insert', table: 'sessions', body: { ...active, ...patch } });
       setQueueCount(getQueue().length);
-      setSessions(p => [...p, { ...active, end_time: endTime }]);
+      setSessions(p => [...p, { ...active, ...patch }]);
       setActive(null);
       return;
     }
 
-    if (offlineUpdate('sessions', active.id, { end_time: endTime }, () => {
-      setSessions(p => [...p, { ...active, end_time: endTime }]);
+    if (offlineUpdate('sessions', active.id, patch, () => {
+      setSessions(p => [...p, { ...active, ...patch }]);
       setActive(null);
     })) return;
 
     setBusy(true);
     try {
-      const r = await withRefresh(t => api.update(t, 'sessions', active.id, { end_time: endTime }));
+      const r = await withRefresh(t => api.update(t, 'sessions', active.id, patch));
       if (Array.isArray(r) && r[0]) { setSessions(p => [...p, r[0]]); setActive(null); }
       else toast('Failed to clock out. Please try again.');
     } catch { toast('Network error. Could not clock out.'); }
@@ -458,7 +462,7 @@ export default function App() {
     } catch { toast('Network error. Could not add job.'); }
   }
   async function updateJob(job) {
-    const body = { name: job.name, rate: job.rate, color: job.color, notes: job.notes, status: job.status || 'active', address: job.address || null, budget_hours: job.budget_hours || null, budget_cost: job.budget_cost || null };
+    const body = { name: job.name, rate: job.rate, color: job.color, notes: job.notes, status: job.status || 'active', address: job.address || null, budget_hours: job.budget_hours || null, budget_cost: job.budget_cost || null, pricing_type: job.pricing_type || 'hourly', half_day_rate: job.half_day_rate || null, full_day_rate: job.full_day_rate || null };
     if (offlineUpdate('jobs', job.id, body, () => setJobs(p => p.map(j => j.id === job.id ? { ...j, ...body } : j)))) return;
     try {
       const r = await withRefresh(t => api.update(t, 'jobs', job.id, body));
@@ -610,13 +614,13 @@ export default function App() {
 
   const tabContent = (
     <>
-      {tab === 'home' && <DashboardTab jobs={jobs} employees={employees} sessions={sessions} active={active} breakState={breakState} onGoTo={id => { setTab(id); setShowMore(false); }} isDesktop={isDesktop} />}
-      {tab === 'clock' && <ClockTab jobs={jobs} employees={employees} sessions={sessions} active={active} onIn={clockIn} onOut={clockOut} onPause={pauseTimer} onResume={resumeTimer} breakState={breakState} onSave={saveSession} onDelete={deleteSession} onVoiceProcess={processVoiceEntry} onVoiceInvoice={setVoiceInvoiceRequest} online={online} busy={busy} isDesktop={isDesktop} />}
-      {tab === 'calendar' && <CalendarTab jobs={jobs} employees={employees} sessions={sessions} onSave={saveSession} onDelete={deleteSession} busy={busy} isDesktop={isDesktop} />}
+      {tab === 'home' && <DashboardTab jobs={jobs} employees={employees} sessions={sessions} company={company} active={active} breakState={breakState} onGoTo={id => { setTab(id); setShowMore(false); }} isDesktop={isDesktop} />}
+      {tab === 'clock' && <ClockTab jobs={jobs} employees={employees} sessions={sessions} company={company} active={active} onIn={clockIn} onOut={clockOut} onPause={pauseTimer} onResume={resumeTimer} breakState={breakState} onSave={saveSession} onDelete={deleteSession} onVoiceProcess={processVoiceEntry} onVoiceInvoice={setVoiceInvoiceRequest} online={online} busy={busy} isDesktop={isDesktop} />}
+      {tab === 'calendar' && <CalendarTab jobs={jobs} employees={employees} sessions={sessions} company={company} onSave={saveSession} onDelete={deleteSession} busy={busy} isDesktop={isDesktop} />}
       {tab === 'mileage' && <MileageTab jobs={jobs} mileage={mileage} onAdd={addMileage} onDelete={deleteMileage} busy={busy} isDesktop={isDesktop} />}
       {tab === 'expenses' && <ExpensesTab jobs={jobs} expenses={expenses} onAdd={addExpense} onDelete={deleteExpense} isDesktop={isDesktop} />}
       {tab === 'reports' && <ReportsTab jobs={jobs} employees={employees} sessions={sessions} mileage={mileage} expenses={expenses} company={company} customers={customers} taxRate={taxRate} isDesktop={isDesktop} onSaveInvoice={addInvoice} />}
-      {tab === 'jobs' && <JobsTab jobs={jobs} sessions={sessions} onAdd={addJob} onUpdate={updateJob} onDelete={deleteJob} isDesktop={isDesktop} />}
+      {tab === 'jobs' && <JobsTab jobs={jobs} sessions={sessions} company={company} onAdd={addJob} onUpdate={updateJob} onDelete={deleteJob} isDesktop={isDesktop} />}
       {tab === 'company' && <CompanyTab employees={employees} onAddEmp={addEmployee} onUpdateEmp={updateEmployee} onDeleteEmp={deleteEmployee} customers={customers} onAddCust={addCustomer} onUpdateCust={updateCustomer} onDeleteCust={deleteCustomer} invoices={invoices} onUpdateInvoice={updateInvoice} onDeleteInvoice={deleteInvoice} company={company} onUpdateCompany={updateCompany} isDesktop={isDesktop} />}
     </>
   );

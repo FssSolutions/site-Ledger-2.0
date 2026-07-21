@@ -10,20 +10,31 @@ export function fmtCAD(n) {
   return new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD' }).format(n || 0);
 }
 
-export function calcEarnings(s, jobs, employees = []) {
+export function calcEarnings(s, jobs, employees = [], company = {}) {
   if (!s.end_time) return 0;
+  const j = jobs.find(x => x.id === s.job_id);
+  if (j?.pricing_type === 'fixed') {
+    if (s.day_type === 'half') return Number(j.half_day_rate ?? company.halfDayRate) || 0;
+    if (s.day_type === 'full') return Number(j.full_day_rate ?? company.fullDayRate) || 0;
+    return 0;
+  }
   const hrs = (new Date(s.end_time) - new Date(s.start_time)) / 3600000;
   if (s.employee_id) {
     const emp = employees.find(e => e.id === s.employee_id);
     if (emp) return hrs * emp.rate;
   }
-  const j = jobs.find(x => x.id === s.job_id);
   return j ? hrs * j.rate : 0;
 }
 
 export function calcDur(s) {
   if (!s.end_time) return 0;
   return new Date(s.end_time) - new Date(s.start_time);
+}
+
+export function calcEffectiveRate(s, jobs, employees = [], company = {}) {
+  const hrs = calcDur(s) / 3600000;
+  if (!hrs) return 0;
+  return calcEarnings(s, jobs, employees, company) / hrs;
 }
 
 export function dayKey(ts) {
