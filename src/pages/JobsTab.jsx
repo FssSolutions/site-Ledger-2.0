@@ -219,7 +219,7 @@ export default function JobsTab({ jobs, sessions, company, onAdd, onUpdate, onDe
           </div>
         ) : (
           <button onClick={() => { setShowAdd(true); setForm({ name: '', rate: '', pricing_type: 'hourly', half_day_rate: '', full_day_rate: '', notes: '', address: '', status: 'active', budget_hours: '', budget_cost: '' }); }}
-            style={{ width: '100%', padding: '14px', borderRadius: 12, border: '1px dashed #ddd', background: 'transparent', color: '#888', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+            style={{ width: '100%', padding: '14px', borderRadius: 12, border: 'none', background: accent, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
             <Icon name="plus" size={14} /> New Job
           </button>
         )}
