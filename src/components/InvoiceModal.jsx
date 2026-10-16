@@ -56,8 +56,23 @@ export default function InvoiceModal({ sessions, jobs, employees, customers, dat
     setSelectedJobIds(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]);
   }
 
-  function handleGenerate() {
+  async function handleGenerate() {
     if (!rs || !re || re < rs) return;
+    // Save the invoice record before downloading the PDF. On mobile (esp. iOS
+    // PWAs) the PDF download can background/interrupt the page and abort any
+    // in-flight request, which surfaced as "Network error. Could not save invoice."
+    if (onSaveInvoice) {
+      await onSaveInvoice({
+        customer_id: selectedCustId || null,
+        customer_name: selectedCustomer?.name || '',
+        amount: parseFloat(total.toFixed(2)),
+        status: 'unpaid',
+        date_generated: new Date().toISOString().slice(0, 10),
+        date_range_start: startStr,
+        date_range_end: endStr,
+        notes: invoiceNum,
+      });
+    }
     generateInvoice({
       sessions: activeSessions,
       jobs,
@@ -74,18 +89,6 @@ export default function InvoiceModal({ sessions, jobs, employees, customers, dat
     if (match) {
       const next = parseInt(match[1], 10) + 1;
       localStorage.setItem('sl_next_invoice_num', String(next));
-    }
-    if (onSaveInvoice) {
-      onSaveInvoice({
-        customer_id: selectedCustId || null,
-        customer_name: selectedCustomer?.name || '',
-        amount: parseFloat(total.toFixed(2)),
-        status: 'unpaid',
-        date_generated: new Date().toISOString().slice(0, 10),
-        date_range_start: startStr,
-        date_range_end: endStr,
-        notes: invoiceNum,
-      });
     }
     setDone(true);
     setTimeout(() => setDone(false), 2000);

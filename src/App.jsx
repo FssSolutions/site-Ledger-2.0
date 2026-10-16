@@ -582,11 +582,17 @@ export default function App() {
     if (offlineInsert('invoices', inv, () => setInvoices(p => [...p, { ...inv, id: 'temp-' + Date.now() }]))) return;
     try {
       const u = await withRefresh(t => api.user(t));
-      if (!u?.id) { toast('Failed to save invoice.'); return; }
+      if (!u?.id) { toast('Failed to save invoice: not signed in. Please sign in again.'); return; }
       const r = await withRefresh(t => api.insert(t, 'invoices', { ...inv, user_id: u.id }));
       if (Array.isArray(r) && r[0]) setInvoices(p => [...p, r[0]]);
-      else toast('Failed to save invoice.');
-    } catch { toast('Network error. Could not save invoice.'); }
+      else {
+        console.error('Invoice insert failed:', r);
+        toast('Failed to save invoice' + (r?.message ? ': ' + r.message : '.'));
+      }
+    } catch (ex) {
+      console.error('Invoice save error:', ex);
+      toast('Network error. Could not save invoice' + (ex?.message ? ': ' + ex.message : '.'));
+    }
   }
   async function updateInvoice(inv) {
     const body = { status: inv.status };

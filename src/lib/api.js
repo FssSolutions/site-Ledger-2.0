@@ -49,6 +49,7 @@ export const api = {
   },
   async user(t) {
     const r = await fetch(`${SURL}/auth/v1/user`, { headers: AH(t) });
+    if (r.status === 401 || r.status === 403) return { _expired: true };
     return r.json();
   },
   async select(t, table, qs = '') {
