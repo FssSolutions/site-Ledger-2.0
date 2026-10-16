@@ -26,3 +26,7 @@ end $$;
 
 -- Make PostgREST pick up the new columns immediately.
 notify pgrst, 'reload schema';
+
+-- The existing table also has a required date_issued column the app never sends.
+alter table invoices alter column date_issued set default current_date;
+notify pgrst, 'reload schema';
