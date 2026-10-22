@@ -16,7 +16,7 @@ export default function SessionModal({ session, initialSession, voiceMeta, date,
   const defaultSt = draft?.start_time ? new Date(draft.start_time).toTimeString().slice(0, 5) : '08:00';
   const defaultEt = draft?.end_time ? new Date(draft.end_time).toTimeString().slice(0, 5) : '16:00';
   const [form, setForm] = useState({
-    jobId: draft ? draft.job_id || '' : jobs[0]?.id || '',
+    jobId: draft ? draft.job_id || '' : jobs.find(j => (j.status || 'active') === 'active')?.id || '',
     empId: draft?.employee_id || '',
     date: draft?.start_time ? dayKey(draft.start_time) : defaultDate,
     st: defaultSt,
@@ -29,6 +29,8 @@ export default function SessionModal({ session, initialSession, voiceMeta, date,
   const endDt = new Date(`${form.date}T${form.et}`);
   const valid = endDt > startDt;
   const job = jobs.find(j => j.id === form.jobId);
+  // Only offer active jobs, but keep the entry's own job listed when editing one on a completed/archived job.
+  const pickableJobs = jobs.filter(j => (j.status || 'active') === 'active' || j.id === draft?.job_id);
   const isFixed = job?.pricing_type === 'fixed';
   const prevMs = valid ? endDt - startDt : 0;
   const fixedRate = form.dayType === 'half' ? (job?.half_day_rate ?? company?.halfDayRate) : (job?.full_day_rate ?? company?.fullDayRate);
@@ -79,7 +81,7 @@ export default function SessionModal({ session, initialSession, voiceMeta, date,
         <div>
           <label style={lbl}>Job{confDot(confidence?.job)}</label>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {jobs.map(j => (
+            {pickableJobs.map(j => (
               <button key={j.id} onClick={() => setForm({ ...form, jobId: j.id })}
                 style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 14px', borderRadius: 10, border: form.jobId === j.id ? `1.5px solid ${j.color}` : '1.5px solid #e8e8e8', background: form.jobId === j.id ? `${j.color}15` : '#fafafa', cursor: 'pointer' }}>
                 <div style={{ width: 9, height: 9, borderRadius: '50%', background: j.color, flexShrink: 0 }} />
