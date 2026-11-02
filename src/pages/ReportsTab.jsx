@@ -6,7 +6,7 @@ import { CRA_RATE } from '../lib/constants.js';
 import { fmtDur, fmtCAD, calcEarnings, calcDur, calcOvertime } from '../lib/utils.js';
 import { useAccentColor } from '../lib/AccentColorContext.js';
 
-export default function ReportsTab({ jobs, employees, sessions, mileage, expenses, company, customers, taxRate, isDesktop, onSaveInvoice }) {
+export default function ReportsTab({ jobs, employees, sessions, mileage, expenses, company, customers, taxRate, isDesktop, onRecordInvoice }) {
   const accent = useAccentColor();
   const [pre, setPre] = useState('month');
   const [cs, setCs] = useState('');
@@ -69,9 +69,9 @@ export default function ReportsTab({ jobs, employees, sessions, mileage, expense
     <div style={{ padding: isDesktop ? '0 0 24px' : '0 0 100px' }}>
       {showInvoice && (
         <InvoiceModal
-          sessions={f} jobs={jobs} employees={employees} customers={customers}
+          sessions={sessions} jobs={jobs} employees={employees} customers={customers}
           dateRange={[rs, re]} company={company} taxRate={taxRate} onClose={() => setShowInvoice(false)}
-          onSaveInvoice={onSaveInvoice}
+          onRecordInvoice={onRecordInvoice}
         />
       )}
 
@@ -216,7 +216,7 @@ export default function ReportsTab({ jobs, employees, sessions, mileage, expense
         <div style={{ padding: '16px 16px 0', display: 'flex', flexDirection: 'column', gap: 8 }}>
           <button onClick={() => setShowInvoice(true)}
             style={{ width: '100%', padding: '14px', borderRadius: 12, border: 'none', background: accent, color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontFamily: "'Syne', sans-serif" }}>
-            <Icon name="dl" size={16} /> Generate Invoice (PDF)
+            <Icon name="invoice" size={16} /> Invoice &amp; Mark as Billed
           </button>
           <button onClick={exportCSV} style={{ width: '100%', padding: '12px', borderRadius: 12, border: '1px solid #e0e0e0', background: '#fff', color: '#888', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
             <Icon name="dl" size={14} /> Export CSV

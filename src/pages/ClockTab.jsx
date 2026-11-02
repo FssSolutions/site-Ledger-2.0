@@ -281,7 +281,7 @@ export default function ClockTab({ jobs, employees, sessions, company, active, o
                   )}
                 </div>
                 <button onClick={() => setEditSess(s)} style={ib}><Icon name="edit" size={14} /></button>
-                <button onClick={() => { if (confirm('Delete this entry?')) onDelete(s.id); }} style={{ ...ib, color: '#e74c3c' }}><Icon name="trash" size={14} /></button>
+                <button onClick={() => { if (confirm(s.invoice_id ? 'This entry has already been billed. Deleting it won\'t change the QuickBooks invoice. Delete anyway?' : 'Delete this entry?')) onDelete(s.id); }} style={{ ...ib, color: '#e74c3c' }}><Icon name="trash" size={14} /></button>
               </div>
             );
           })}

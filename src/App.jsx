@@ -578,20 +578,37 @@ export default function App() {
     catch { toast('Failed to delete expense.'); }
   }
 
-  async function addInvoice(inv) {
-    if (offlineInsert('invoices', inv, () => setInvoices(p => [...p, { ...inv, id: 'temp-' + Date.now() }]))) return;
+  // Records an invoice sent from QuickBooks and marks its time entries as billed.
+  // Returns true on success. Needs a connection so entries can't be double-billed.
+  async function recordInvoice(inv, sessionIds) {
+    if (!isOnline()) { toast('You are offline. Connect to the internet to mark hours as billed.'); return false; }
     try {
       const u = await withRefresh(t => api.user(t));
-      if (!u?.id) { toast('Failed to save invoice: not signed in. Please sign in again.'); return; }
+      if (!u?.id) { toast('Failed to save invoice: not signed in. Please sign in again.'); return false; }
       const r = await withRefresh(t => api.insert(t, 'invoices', { ...inv, user_id: u.id }));
-      if (Array.isArray(r) && r[0]) setInvoices(p => [...p, r[0]]);
-      else {
+      if (!Array.isArray(r) || !r[0]) {
         console.error('Invoice insert failed:', r);
         toast('Failed to save invoice' + (r?.message ? ': ' + r.message : '.'));
+        return false;
       }
+      const saved = r[0];
+      setInvoices(p => [...p, saved]);
+      const ids = sessionIds.filter(id => !String(id).startsWith('temp-'));
+      if (ids.length === 0) return true;
+      const ur = await withRefresh(t => api.updateMany(t, 'sessions', ids, { invoice_id: saved.id }));
+      if (!Array.isArray(ur) || ur.length !== ids.length) {
+        console.error('Marking sessions billed failed:', ur);
+        toast('Invoice saved, but some hours could not be marked as billed' + (ur?.message ? ': ' + ur.message : '.'));
+        if (!Array.isArray(ur)) return false;
+      }
+      const billedIds = new Set((Array.isArray(ur) ? ur : []).map(x => x.id));
+      setSessions(p => p.map(x => billedIds.has(x.id) ? { ...x, invoice_id: saved.id } : x));
+      toast(`Marked ${billedIds.size} entr${billedIds.size === 1 ? 'y' : 'ies'} as billed on ${saved.notes || 'invoice'}.`, 'success');
+      return true;
     } catch (ex) {
       console.error('Invoice save error:', ex);
       toast('Network error. Could not save invoice' + (ex?.message ? ': ' + ex.message : '.'));
+      return false;
     }
   }
   async function updateInvoice(inv) {
@@ -604,8 +621,13 @@ export default function App() {
     } catch { toast('Network error. Could not update invoice.'); }
   }
   async function deleteInvoice(id) {
-    if (offlineDelete('invoices', id, () => setInvoices(p => p.filter(x => x.id !== id)))) return;
-    try { await withRefresh(t => api.delete(t, 'invoices', id)); setInvoices(p => p.filter(x => x.id !== id)); }
+    // The database releases the invoice's hours (invoice_id is set to null on delete).
+    const release = () => {
+      setInvoices(p => p.filter(x => x.id !== id));
+      setSessions(p => p.map(s => s.invoice_id === id ? { ...s, invoice_id: null } : s));
+    };
+    if (offlineDelete('invoices', id, release)) return;
+    try { await withRefresh(t => api.delete(t, 'invoices', id)); release(); }
     catch { toast('Failed to delete invoice.'); }
   }
 
@@ -620,14 +642,14 @@ export default function App() {
 
   const tabContent = (
     <>
-      {tab === 'home' && <DashboardTab jobs={jobs} employees={employees} sessions={sessions} company={company} active={active} breakState={breakState} onGoTo={id => { setTab(id); setShowMore(false); }} isDesktop={isDesktop} />}
+      {tab === 'home' && <DashboardTab jobs={jobs} employees={employees} sessions={sessions} company={company} invoices={invoices} active={active} breakState={breakState} onGoTo={id => { setTab(id); setShowMore(false); }} isDesktop={isDesktop} />}
       {tab === 'clock' && <ClockTab jobs={jobs} employees={employees} sessions={sessions} company={company} active={active} onIn={clockIn} onOut={clockOut} onPause={pauseTimer} onResume={resumeTimer} breakState={breakState} onSave={saveSession} onDelete={deleteSession} onVoiceProcess={processVoiceEntry} onVoiceInvoice={setVoiceInvoiceRequest} online={online} busy={busy} isDesktop={isDesktop} />}
-      {tab === 'calendar' && <CalendarTab jobs={jobs} employees={employees} sessions={sessions} company={company} onSave={saveSession} onDelete={deleteSession} busy={busy} isDesktop={isDesktop} />}
+      {tab === 'calendar' && <CalendarTab jobs={jobs} employees={employees} sessions={sessions} company={company} invoices={invoices} onSave={saveSession} onDelete={deleteSession} busy={busy} isDesktop={isDesktop} />}
       {tab === 'mileage' && <MileageTab jobs={jobs} mileage={mileage} onAdd={addMileage} onDelete={deleteMileage} busy={busy} isDesktop={isDesktop} />}
       {tab === 'expenses' && <ExpensesTab jobs={jobs} expenses={expenses} onAdd={addExpense} onDelete={deleteExpense} isDesktop={isDesktop} />}
-      {tab === 'reports' && <ReportsTab jobs={jobs} employees={employees} sessions={sessions} mileage={mileage} expenses={expenses} company={company} customers={customers} taxRate={taxRate} isDesktop={isDesktop} onSaveInvoice={addInvoice} />}
+      {tab === 'reports' && <ReportsTab jobs={jobs} employees={employees} sessions={sessions} mileage={mileage} expenses={expenses} company={company} customers={customers} taxRate={taxRate} isDesktop={isDesktop} onRecordInvoice={recordInvoice} />}
       {tab === 'jobs' && <JobsTab jobs={jobs} sessions={sessions} company={company} onAdd={addJob} onUpdate={updateJob} onDelete={deleteJob} isDesktop={isDesktop} />}
-      {tab === 'company' && <CompanyTab employees={employees} onAddEmp={addEmployee} onUpdateEmp={updateEmployee} onDeleteEmp={deleteEmployee} customers={customers} onAddCust={addCustomer} onUpdateCust={updateCustomer} onDeleteCust={deleteCustomer} invoices={invoices} onUpdateInvoice={updateInvoice} onDeleteInvoice={deleteInvoice} company={company} onUpdateCompany={updateCompany} isDesktop={isDesktop} />}
+      {tab === 'company' && <CompanyTab employees={employees} onAddEmp={addEmployee} onUpdateEmp={updateEmployee} onDeleteEmp={deleteEmployee} customers={customers} onAddCust={addCustomer} onUpdateCust={updateCustomer} onDeleteCust={deleteCustomer} invoices={invoices} sessions={sessions} onUpdateInvoice={updateInvoice} onDeleteInvoice={deleteInvoice} company={company} onUpdateCompany={updateCompany} isDesktop={isDesktop} />}
     </>
   );
 
@@ -668,7 +690,7 @@ export default function App() {
       company={company}
       taxRate={taxRate}
       voiceRequest={voiceInvoiceRequest}
-      onSaveInvoice={addInvoice}
+      onRecordInvoice={recordInvoice}
       onClose={() => setVoiceInvoiceRequest(null)}
     />
   ) : null;

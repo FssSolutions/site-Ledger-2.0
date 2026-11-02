@@ -6,7 +6,7 @@ import { MN } from '../lib/constants.js';
 import { fmtDur, fmtCAD, calcEarnings, calcEffectiveRate, calcDur, dayKey, calcOvertime } from '../lib/utils.js';
 import { useAccentColor } from '../lib/AccentColorContext.js';
 
-export default function CalendarTab({ jobs, employees, sessions, company, onSave, onDelete, busy, isDesktop }) {
+export default function CalendarTab({ jobs, employees, sessions, company, invoices = [], onSave, onDelete, busy, isDesktop }) {
   const accent = useAccentColor();
   const [vd, setVd] = useState(new Date());
   const [sel, setSel] = useState(null);
@@ -138,6 +138,11 @@ export default function CalendarTab({ jobs, employees, sessions, company, onSave
                     {new Date(s.start_time).toLocaleTimeString('en-CA', { hour: '2-digit', minute: '2-digit' })} –{' '}
                     {new Date(s.end_time).toLocaleTimeString('en-CA', { hour: '2-digit', minute: '2-digit' })} · {fmtDur(calcDur(s))}
                   </div>
+                  {s.invoice_id && (
+                    <div style={{ display: 'inline-block', marginTop: 3, padding: '1px 7px', borderRadius: 10, background: '#EBF5FB', color: '#2E86AB', fontSize: 10, fontWeight: 700 }}>
+                      Billed{(() => { const inv = invoices.find(x => x.id === s.invoice_id); return inv?.notes ? ` · ${inv.notes}` : ''; })()}
+                    </div>
+                  )}
                 </div>
                 <div style={{ textAlign: 'right', marginRight: 4 }}>
                   {(() => {
@@ -158,7 +163,7 @@ export default function CalendarTab({ jobs, employees, sessions, company, onSave
                   })()}
                 </div>
                 <button onClick={() => setModal(s)} style={ib}><Icon name="edit" size={14} /></button>
-                <button onClick={() => { if (confirm('Delete this entry?')) onDelete(s.id); }} style={{ ...ib, color: '#e74c3c' }}><Icon name="trash" size={14} /></button>
+                <button onClick={() => { if (confirm(s.invoice_id ? 'This entry has already been billed. Deleting it won\'t change the QuickBooks invoice. Delete anyway?' : 'Delete this entry?')) onDelete(s.id); }} style={{ ...ib, color: '#e74c3c' }}><Icon name="trash" size={14} /></button>
               </div>
             );
           })}

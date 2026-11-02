@@ -4,7 +4,7 @@ import { card } from '../styles.js';
 import { fmtDur, fmtCAD, calcEarnings, calcDur, dayKey } from '../lib/utils.js';
 import { useAccentColor } from '../lib/AccentColorContext.js';
 
-export default function DashboardTab({ jobs, employees, sessions, company, active, breakState, onGoTo, isDesktop }) {
+export default function DashboardTab({ jobs, employees, sessions, company, invoices, active, breakState, onGoTo, isDesktop }) {
   const accent = useAccentColor();
   const [tick, setTick] = useState(0);
 
@@ -53,6 +53,21 @@ export default function DashboardTab({ jobs, employees, sessions, company, activ
   const monthBilled = monthSessions.reduce((a, s) => a + calcEarnings(s, jobs, [], company), 0);
   const monthLabour = monthSessions.reduce((a, s) => a + calcEarnings(s, jobs, employees, company), 0);
   const monthProfit = monthBilled - monthLabour;
+
+  // Unbilled work, valued at billing rates (pre-tax).
+  const unbilled = useMemo(() => {
+    const byJob = {};
+    sessions.forEach(s => {
+      if (s.invoice_id || !s.end_time) return;
+      const e = byJob[s.job_id] || (byJob[s.job_id] = { ms: 0, amt: 0, n: 0 });
+      e.ms += calcDur(s); e.amt += calcEarnings(s, jobs, [], company); e.n += 1;
+    });
+    const rows = Object.entries(byJob)
+      .map(([id, v]) => ({ job: jobs.find(j => j.id === id), ...v }))
+      .filter(x => x.job)
+      .sort((a, b) => b.amt - a.amt);
+    return { rows, ms: rows.reduce((a, r) => a + r.ms, 0), amt: rows.reduce((a, r) => a + r.amt, 0) };
+  }, [sessions, jobs, company]);
 
   const recent = useMemo(() => [...sessions].sort((a, b) => new Date(b.start_time) - new Date(a.start_time)).slice(0, 3), [sessions]);
 
@@ -126,6 +141,26 @@ export default function DashboardTab({ jobs, employees, sessions, company, activ
               <div style={{ height: 5, borderRadius: 3, background: '#f0f0f0' }}>
                 <div style={{ height: 5, borderRadius: 3, background: job.color || accent, width: `${(ms / topJobsMax) * 100}%`, transition: 'width 0.3s' }} />
               </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Unbilled work */}
+      {unbilled.rows.length > 0 && (
+        <div style={{ ...card, margin: '0 16px 12px', padding: '18px 20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#111', fontFamily: "'Syne', sans-serif" }}>Unbilled</div>
+            <button onClick={() => onGoTo('reports')} style={{ fontSize: 11, color: accent, background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>Invoice</button>
+          </div>
+          <div style={{ fontSize: 18, fontWeight: 700, color: '#111', marginBottom: 2 }}>{fmtCAD(unbilled.amt)}</div>
+          <div style={{ fontSize: 11, color: '#aaa', marginBottom: 10 }}>{fmtDur(unbilled.ms)} not yet invoiced · before tax</div>
+          {unbilled.rows.map(({ job, ms, amt }) => (
+            <div key={job.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderTop: '1px solid #f4f4f4' }}>
+              <div style={{ width: 8, height: 8, borderRadius: '50%', background: job.color || accent, flexShrink: 0 }} />
+              <div style={{ flex: 1, fontSize: 12, color: '#333', fontWeight: 600 }}>{job.name}</div>
+              <div style={{ fontSize: 12, color: '#888', fontFamily: "'DM Mono', monospace" }}>{fmtDur(ms)}</div>
+              <div style={{ fontSize: 12, color: '#111', fontWeight: 600, minWidth: 70, textAlign: 'right' }}>{fmtCAD(amt)}</div>
             </div>
           ))}
         </div>

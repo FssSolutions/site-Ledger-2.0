@@ -1,10 +1,10 @@
 import { useState, useRef } from 'react';
 import Icon from '../components/Icon.jsx';
 import { card, ib, inp, lbl } from '../styles.js';
-import { fmtCAD } from '../lib/utils.js';
+import { fmtCAD, calcDur } from '../lib/utils.js';
 import { useAccentColor } from '../lib/AccentColorContext.js';
 
-export default function CompanyTab({ employees, onAddEmp, onUpdateEmp, onDeleteEmp, customers, onAddCust, onUpdateCust, onDeleteCust, invoices, onUpdateInvoice, onDeleteInvoice, company, onUpdateCompany, isDesktop }) {
+export default function CompanyTab({ employees, onAddEmp, onUpdateEmp, onDeleteEmp, customers, onAddCust, onUpdateCust, onDeleteCust, invoices, sessions = [], onUpdateInvoice, onDeleteInvoice, company, onUpdateCompany, isDesktop }) {
   const accent = useAccentColor();
   const [view, setView] = useState('crew');
 
@@ -163,6 +163,8 @@ export default function CompanyTab({ employees, onAddEmp, onUpdateEmp, onDeleteE
           )}
           {[...(invoices || [])].reverse().map(inv => {
             const isPaid = inv.status === 'paid';
+            const covered = sessions.filter(s => s.invoice_id === inv.id);
+            const coveredHrs = covered.reduce((a, s) => a + calcDur(s), 0) / 3600000;
             return (
               <div key={inv.id} style={{ ...card, padding: '14px 16px', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 12 }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -171,13 +173,16 @@ export default function CompanyTab({ employees, onAddEmp, onUpdateEmp, onDeleteE
                     {inv.customer_name || 'No customer'} · {inv.date_generated}
                   </div>
                   <div style={{ color: '#333', fontSize: 13, fontWeight: 600, marginTop: 2 }}>{fmtCAD(Number(inv.amount))}</div>
+                  {covered.length > 0 && (
+                    <div style={{ color: '#aaa', fontSize: 11, marginTop: 2 }}>{covered.length} entr{covered.length === 1 ? 'y' : 'ies'} · {coveredHrs.toFixed(2)} hrs billed</div>
+                  )}
                 </div>
                 <button
                   onClick={() => onUpdateInvoice({ ...inv, status: isPaid ? 'unpaid' : 'paid' })}
                   style={{ padding: '6px 12px', borderRadius: 20, border: 'none', fontSize: 11, fontWeight: 700, cursor: 'pointer', background: isPaid ? '#3BB273' : '#f0f0f0', color: isPaid ? '#fff' : '#888', flexShrink: 0 }}>
                   {isPaid ? 'Paid' : 'Unpaid'}
                 </button>
-                <button onClick={() => { if (confirm('Delete this invoice record?')) onDeleteInvoice(inv.id); }} style={{ ...ib, color: '#e74c3c' }}><Icon name="trash" size={14} /></button>
+                <button onClick={() => { if (confirm(covered.length ? `Delete this invoice record? Its ${covered.length} entr${covered.length === 1 ? 'y' : 'ies'} will go back to unbilled.` : 'Delete this invoice record?')) onDeleteInvoice(inv.id); }} style={{ ...ib, color: '#e74c3c' }}><Icon name="trash" size={14} /></button>
               </div>
             );
           })}

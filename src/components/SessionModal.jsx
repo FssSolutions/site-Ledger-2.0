@@ -57,6 +57,11 @@ export default function SessionModal({ session, initialSession, voiceMeta, date,
     <Modal onClose={onClose}>
       <ModalHeader title={isEdit ? 'Edit Entry' : 'Add Entry'} subtitle={subtitle} onClose={onClose} />
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {session?.invoice_id && (
+          <div style={{ border: '1px solid #D6EAF8', borderRadius: 12, background: '#EBF5FB', padding: '10px 14px', color: '#2E86AB', fontSize: 12 }}>
+            This entry has already been billed. Changes here won't update the QuickBooks invoice.
+          </div>
+        )}
         {voiceMeta && (
           <div style={{ border: '1px solid #f0c070', borderRadius: 12, background: '#fffaf2', padding: '12px 14px' }}>
             <div style={{ color: '#c87020', fontSize: 11, fontWeight: 700, fontFamily: "'DM Mono', monospace", letterSpacing: 1, textTransform: 'uppercase', marginBottom: 8 }}>Voice draft</div>
