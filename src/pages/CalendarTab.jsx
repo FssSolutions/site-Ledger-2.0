@@ -74,6 +74,7 @@ export default function CalendarTab({ jobs, employees, sessions, company, invoic
           const cols = [...new Set(ds.map(s => jobs.find(j => j.id === s.job_id)?.color).filter(Boolean))];
           const dayOT = ot.daily[k];
           const hasOT = dayOT && dayOT.overtime > 0;
+          const hasUnbilled = ds.some(s => s.end_time && !s.invoice_id);
           return (
             <button key={d} onClick={() => setSel(isSel ? null : d)}
               onMouseEnter={ds.length > 0 ? e => {
@@ -83,7 +84,12 @@ export default function CalendarTab({ jobs, employees, sessions, company, invoic
               } : undefined}
               onMouseLeave={ds.length > 0 ? () => setTooltip(null) : undefined}
               style={{ aspectRatio: '1', borderRadius: 10, border: isSel ? `1.5px solid ${accent}` : hasOT ? '1.5px solid #E67E22' : isTd ? '1.5px solid #ccc' : '1.5px solid transparent', background: isSel ? `${accent}22` : hasOT ? '#FEF5E7' : isTd ? '#f0f0f0' : 'transparent', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2, padding: 4 }}>
-              <span style={{ color: hasOT ? '#E67E22' : isTd ? accent : ds.length ? '#111' : '#bbb', fontSize: 13, fontWeight: isTd || hasOT ? 700 : 400 }}>{d}</span>
+              <span style={{ position: 'relative', color: hasOT ? '#E67E22' : isTd ? accent : ds.length ? '#111' : '#bbb', fontSize: 13, fontWeight: isTd || hasOT ? 700 : 400 }}>
+                {d}
+                {hasUnbilled && (
+                  <span title="Not yet billed" style={{ position: 'absolute', top: -1, right: -7, width: 6, height: 6, borderRadius: '50%', background: '#dc3333' }} />
+                )}
+              </span>
               {cols.length > 0 && (
                 <div style={{ display: 'flex', gap: 2 }}>
                   {cols.slice(0, 3).map((c, ci) => <div key={ci} style={{ width: 5, height: 5, borderRadius: '50%', background: c }} />)}
@@ -94,6 +100,12 @@ export default function CalendarTab({ jobs, employees, sessions, company, invoic
           );
         })}
       </div>
+
+      {Object.values(byDay).some(ds => ds.some(s => s.end_time && !s.invoice_id)) && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 20px 0', color: '#999', fontSize: 11 }}>
+          <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#dc3333' }} /> Not yet billed
+        </div>
+      )}
 
       {sel && (
         <div style={{ ...card, margin: '16px 16px 0', padding: '20px 24px' }}>
