@@ -54,3 +54,41 @@ Additional issues found while working:
   migration adds a unique index when safe.
 - BC moved to permanent UTC−7 in tzdata 2026e; tests no longer hard-code a
   November 2026 fall-back.
+
+## Status and next steps (as of 2026-11-03)
+
+Done:
+- Database update `20261103120000_security_and_sync_hardening.sql` applied to
+  production and verified (see docs/DATABASE.md, "Applied to production").
+- Vercel preview of branch `claude/youthful-cannon-bxvyqh` builds and sign-in
+  works against the updated database.
+
+To go live:
+1. Offline test on the preview (phone): clock in, airplane mode, break,
+   close/reopen, resume, clock out, add an expense, reconnect → banner clears.
+2. Supabase → Authentication → URL Configuration: Site URL = live Vercel
+   address; add it to Redirect URLs (needed for password-reset emails).
+3. GitHub: pull request from `claude/youthful-cannon-bxvyqh` into `main`,
+   merge; Vercel deploys `main`.
+4. Each phone: open the live app online, tap **Update** on the blue banner.
+   Until then, don't record invoices from the old app version.
+
+Optional / later:
+- Remove the "Billed before Oct 25, 2026" records belonging to the two
+  accounts that are not the owner's (owner decided this is likely wanted;
+  not done yet). Look first:
+  `select u.email, i.id, count(s.id) from public.invoices i join auth.users u on u.id = i.user_id left join public.sessions s on s.invoice_id = i.id where i.notes = 'Billed before Oct 25, 2026' group by u.email, i.id;`
+  then delete the other accounts' records inside `begin; … commit;`.
+- Deploy the new voice function (needs Supabase CLI):
+  `npx supabase login`, `npx supabase link --project-ref <ref>`,
+  `npx supabase secrets set ALLOWED_ORIGINS=https://<live-address>`,
+  `npx supabase functions deploy voice-entry`.
+- Live two-account isolation check with throwaway test logins
+  (docs/DATABASE.md, "Live verification checklist").
+- Confirm CI passes on GitHub after the merge (.github/workflows/ci.yml).
+- Each January: confirm CRA per-km allowance rates in `src/lib/mileage.js`
+  (2026 "after 5,000 km" rate is unverified).
+
+Known limitations: on-device data is not encrypted (docs/SECURITY.md);
+invoices, paid status and invoice deletion need a connection; sessions
+recorded before this change use current rates (flagged in Reports).
