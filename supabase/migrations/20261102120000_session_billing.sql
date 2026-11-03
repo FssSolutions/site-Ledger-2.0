@@ -19,29 +19,12 @@ end $$;
 
 create index if not exists sessions_invoice_id_idx on sessions (invoice_id);
 
--- One-time backfill: everything up to and including Oct 24, 2026 (Vancouver time)
--- was already billed in QuickBooks. Group it under one record per user so it can
--- be undone by deleting that record.
-with cutoff as (
-  select timestamptz '2026-10-25 00:00:00 America/Vancouver' as ts
-),
-owners as (
-  select distinct s.user_id
-  from sessions s, cutoff
-  where s.invoice_id is null and s.end_time is not null and s.start_time < cutoff.ts
-),
-created as (
-  insert into invoices (user_id, customer_name, amount, status, date_generated, date_range_end, notes)
-  select user_id, '', 0, 'paid', date '2026-10-24', date '2026-10-24', 'Billed before Oct 25, 2026'
-  from owners
-  returning id, user_id
-)
-update sessions s
-set invoice_id = created.id
-from created, cutoff
-where s.user_id = created.user_id
-  and s.invoice_id is null
-  and s.end_time is not null
-  and s.start_time < cutoff.ts;
+-- NOTE (2026-11-03): this file originally also contained a one-time backfill
+-- that marked every account's completed sessions before 2026-10-25 as billed.
+-- That reconciliation was personal to one account, so it has been moved to
+-- supabase/reconciliation/20261025_mark_prior_sessions_billed.sql, scoped to a
+-- single user id, and must be run manually. If this migration was already
+-- applied in production, the backfill already ran there; removing it here does
+-- not undo anything. See docs/DATABASE.md ("Historical billing backfill").
 
 notify pgrst, 'reload schema';
