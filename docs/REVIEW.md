@@ -74,9 +74,10 @@ To go live:
    Until then, don't record invoices from the old app version.
 
 Optional / later:
-- Remove the "Billed before Oct 25, 2026" records belonging to the two
-  accounts that are not the owner's (owner decided this is likely wanted;
-  not done yet). Look first:
+- Decide whether to remove the "Billed before Oct 25, 2026" records that
+  belong to the two accounts that are not the owner's (recommended, since
+  those users' old hours were marked billed by mistake; owner has not
+  decided; not done). Look first:
   `select u.email, i.id, count(s.id) from public.invoices i join auth.users u on u.id = i.user_id left join public.sessions s on s.invoice_id = i.id where i.notes = 'Billed before Oct 25, 2026' group by u.email, i.id;`
   then delete the other accounts' records inside `begin; … commit;`.
 - Deploy the new voice function (needs Supabase CLI):
