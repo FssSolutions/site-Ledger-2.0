@@ -142,7 +142,7 @@ export default function JobsTab({ jobs, sessions, company, onAdd, onUpdate, onDe
                     </div>
                   </div>
                   <button type="button" aria-label={`Edit ${job.name}`} onClick={() => { setEditId(job.id); setForm({ name: job.name, rate: str(job.rate), pricing_type: job.pricing_type || 'hourly', half_day_rate: str(job.half_day_rate), full_day_rate: str(job.full_day_rate), notes: job.notes || '', address: job.address || '', status: job.status || 'active', budget_hours: str(job.budget_hours), budget_cost: str(job.budget_cost) }); setCi(Math.max(0, JOB_COLORS.indexOf(job.color))); }} style={{ ...ib, color: '#aaa', marginRight: 4 }}><Icon name="edit" size={15} /></button>
-                  <button type="button" aria-label={`Delete ${job.name}`} onClick={() => { const n = sessions.filter(x => x.job_id === job.id).length; if (window.confirm(n ? `Delete ${job.name}? It has ${n} time entr${n === 1 ? 'y' : 'ies'}; deleting the job may delete them too. Consider marking it Complete or Archived instead.` : `Delete ${job.name}?`)) onDelete(job.id); }} style={{ ...ib, color: '#c0392b', padding: 8 }}><Icon name="trash" size={15} /></button>
+                  <button type="button" aria-label={`Delete ${job.name}`} onClick={() => { if (window.confirm(`Delete ${job.name}?`)) onDelete(job.id); }} style={{ ...ib, color: '#c0392b', padding: 8 }}><Icon name="trash" size={15} /></button>
                 </div>
                 {job.address && <div style={{ color: '#888', fontSize: 12, marginTop: 6, paddingLeft: 24 }}>{job.address}</div>}
                 {job.notes && <div style={{ color: '#999', fontSize: 12, marginTop: 4, paddingLeft: 24, lineHeight: 1.5 }}>{job.notes}</div>}

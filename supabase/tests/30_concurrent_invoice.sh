@@ -41,7 +41,10 @@ INVOICES=$("${PSQL[@]}" -c "select count(*) from public.invoices where user_id =
 CLAIMED=$("${PSQL[@]}" -c "select count(distinct invoice_id) from public.sessions where user_id = 'cccccccc-0000-0000-0000-000000000003' and invoice_id is not null")
 
 # Clean up committed fixtures.
-"${PSQL[@]}" -c "delete from public.invoices where user_id = 'cccccccc-0000-0000-0000-000000000003'" >/dev/null
+# Production foreign keys do not cascade, so remove children first.
+for t in invoices sessions jobs; do
+  "${PSQL[@]}" -c "delete from public.$t where user_id = 'cccccccc-0000-0000-0000-000000000003'" >/dev/null
+done
 "${PSQL[@]}" -c "delete from auth.users where id = 'cccccccc-0000-0000-0000-000000000003'" >/dev/null
 
 if [[ $R1 -eq 0 && $R2 -ne 0 && $INVOICES == 1 && $CLAIMED == 1 ]]; then

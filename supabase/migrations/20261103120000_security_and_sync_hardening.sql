@@ -70,6 +70,9 @@ alter table public.jobs add column if not exists full_day_rate numeric;
 alter table public.sessions add column if not exists day_type text;
 alter table public.company_profiles add column if not exists half_day_rate numeric;
 alter table public.company_profiles add column if not exists full_day_rate numeric;
+-- The app has always sent expenses.category, but production (inspected
+-- 2026-11-03) has no such column, so expense saves were failing.
+alter table public.expenses add column if not exists category text;
 
 -- Breaks are stored separately from the actual start/end timestamps.
 alter table public.sessions add column if not exists break_seconds integer not null default 0;

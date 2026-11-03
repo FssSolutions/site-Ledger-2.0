@@ -22,6 +22,26 @@ What it changes that affects access:
   applying.
 - Revokes all table privileges from `anon`.
 
+## Production inspection (2026-11-03)
+
+- All `id`/`user_id`/reference columns are `uuid`; RLS is on for all eight
+  tables, and existing policies are owner-only (role `public`, some
+  duplicated, some relying on USING as the implicit WITH CHECK).
+- `anon` holds the default table grants (blocked by RLS today; revoked by the
+  migration).
+- `expenses` has **no `category` column** although the app always sent one;
+  the migration adds it.
+- `sessions.job_id`, `sessions.employee_id` and `mileage.job_id` have no
+  ON DELETE action, so the database refuses to delete a job with entries or
+  trips, or a worker with entries. The app now explains this instead of
+  failing during sync.
+- No ownerless rows, no cross-account references, no duplicate company
+  profiles. 4 accounts; the Oct 25 backfill created records for 3 accounts
+  covering 85 sessions.
+- No custom functions; migrations do not appear to be tracked by the
+  Supabase CLI, so apply the new migration by running the file (do not use
+  `supabase db push`, which would try to re-run the older files).
+
 ## Rollout order (production actions — awaiting approval)
 
 1. **Back up.** Supabase Dashboard → Database → Backups (confirm a recent

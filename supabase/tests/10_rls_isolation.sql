@@ -22,15 +22,19 @@ insert into public.company_profiles (name) values ('A Co');
 select tests.assert((select user_id from public.jobs where id = 'a0000000-0000-0000-0000-00000000000a') = 'aaaaaaaa-0000-0000-0000-000000000001',
   'user_id defaults to auth.uid()');
 select tests.assert((select version from public.jobs where id = 'a0000000-0000-0000-0000-00000000000a') = 1, 'insert sets version 1');
+insert into public.expenses (job_id, date, description, amount, category) values ('a0000000-0000-0000-0000-00000000000a', '2026-10-02', 'screws', 9, 'materials');
+select tests.assert((select category from public.expenses where description = 'screws') = 'materials', 'expenses.category exists after migration');
 
 -- Account B sees nothing of A's, in any table.
 select tests.as_user('bbbbbbbb-0000-0000-0000-000000000002');
-select tests.assert((select count(*) from public.jobs) = 0, 'B cannot SELECT A jobs (legacy permissive policy removed)');
+select tests.assert((select count(*) from public.jobs) = 0, 'B cannot SELECT A jobs (stray permissive policy removed)');
 select tests.assert((select count(*) from public.sessions) = 0, 'B cannot SELECT A sessions');
 select tests.assert((select count(*) from public.employees) = 0, 'B cannot SELECT A employees');
 select tests.assert((select count(*) from public.customers) = 0, 'B cannot SELECT A customers');
 select tests.assert((select count(*) from public.mileage) = 0, 'B cannot SELECT A mileage');
-select tests.assert((select count(*) from public.expenses) = 0, 'B cannot SELECT A expenses (RLS was disabled in baseline)');
+select tests.assert((select count(*) from public.expenses) = 0, 'B cannot SELECT A expenses');
+select tests.assert(tests.rows_affected($$update public.expenses set amount = 1$$) = 0, 'B cannot UPDATE A expenses');
+select tests.assert(tests.rows_affected($$update public.invoices set amount = 1$$) = 0, 'B cannot UPDATE A invoices');
 select tests.assert((select count(*) from public.company_profiles) = 0, 'B cannot SELECT A company profile');
 select tests.assert((select count(*) from public.invoices) = 0, 'B cannot SELECT A invoices');
 

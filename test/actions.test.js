@@ -183,3 +183,22 @@ describe('clock-out edge cases', () => {
     expect(s.break_seconds * 1000).toBeLessThan(Date.parse(s.end_time) - Date.parse(s.start_time));
   });
 });
+
+describe('deletes the database would refuse', () => {
+  it('a job with time entries or trips cannot be deleted; an empty one can', async () => {
+    const job = await addJob();
+    await actions.addMileage({ job_id: job.id, date: '2026-11-02', km: 10 }); await refresh();
+    const r = await actions.deleteJob(job.id);
+    expect(r.ok).toBe(false);
+    expect(r.error).toMatch(/1 trip/);
+    const empty = await addJob({ name: 'Empty' });
+    expect((await actions.deleteJob(empty.id)).ok).toBe(true);
+  });
+
+  it('a crew member with time entries cannot be removed', async () => {
+    const job = await addJob();
+    const emp = (await actions.addEmployee({ name: 'Sam', rate: 40 })).data; await refresh();
+    await actions.saveSession({ job_id: job.id, employee_id: emp.id, start_time: '2026-11-03T16:00:00Z', end_time: '2026-11-03T20:00:00Z' }); await refresh();
+    expect((await actions.deleteEmployee(emp.id)).ok).toBe(false);
+  });
+});

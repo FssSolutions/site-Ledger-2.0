@@ -176,9 +176,17 @@ export function createActions({ store, getView, now = () => new Date() }) {
       if (row.pricing_type === 'hourly' && row.rate == null) return fail('Enter an hourly rate (0 is allowed).');
       return attempt(() => store.update('jobs', j.id, row));
     },
+    // The production database refuses to delete a job that still has time
+    // entries or trips (and a worker who still has time entries), so say so
+    // up front instead of letting the delete fail during sync.
     async deleteJob(id) {
-      if (v().sessions.some(s => s.job_id === id && s.invoice_id)) return fail('This job has billed hours. Mark it Complete or Archived instead.');
       if (v().active?.job_id === id) return fail('Clock out of this job before deleting it.');
+      const entries = v().sessions.filter(s => s.job_id === id).length + v().openSessions.filter(s => s.job_id === id).length;
+      const trips = v().mileage.filter(m => m.job_id === id).length;
+      if (entries || trips) {
+        const parts = [entries && `${entries} time entr${entries === 1 ? 'y' : 'ies'}`, trips && `${trips} trip${trips === 1 ? '' : 's'}`].filter(Boolean).join(' and ');
+        return fail(`This job has ${parts}, so it can't be deleted. Mark it Complete or Archived instead.`);
+      }
       return attempt(() => store.remove('jobs', id));
     },
 
@@ -194,6 +202,8 @@ export function createActions({ store, getView, now = () => new Date() }) {
     },
     async deleteEmployee(id) {
       if (v().active?.employee_id === id) return fail('Clock this worker out first.');
+      const entries = [...v().sessions, ...v().openSessions].filter(s => s.employee_id === id).length;
+      if (entries) return fail(`This crew member has ${entries} time entr${entries === 1 ? 'y' : 'ies'}, so they can't be removed. Their past hours stay on record.`);
       return attempt(() => store.remove('employees', id));
     },
 
