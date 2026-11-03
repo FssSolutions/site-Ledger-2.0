@@ -500,11 +500,11 @@ begin
 
   insert into public.invoice_lines (user_id, invoice_id, session_id, line_no, work_date, description,
                                     worker_name, quantity, unit, unit_price, amount)
-  select v_uid, v_id, (l ->> 'session_id')::uuid, (row_number() over ())::integer,
-         (l ->> 'work_date')::date, coalesce(l ->> 'description', ''), l ->> 'worker_name',
-         (l ->> 'quantity')::numeric(10,2), l ->> 'unit', (l ->> 'unit_price')::numeric(12,2),
-         (l ->> 'amount')::numeric(12,2)
-    from jsonb_array_elements(p_lines) l;
+  select v_uid, v_id, (t.l ->> 'session_id')::uuid, t.n::integer,
+         (t.l ->> 'work_date')::date, coalesce(t.l ->> 'description', ''), t.l ->> 'worker_name',
+         (t.l ->> 'quantity')::numeric(10,2), t.l ->> 'unit', (t.l ->> 'unit_price')::numeric(12,2),
+         (t.l ->> 'amount')::numeric(12,2)
+    from jsonb_array_elements(p_lines) with ordinality as t(l, n);
 
   perform set_config('sl.claiming_invoice', v_id::text, true);
   update public.sessions set invoice_id = v_id

@@ -48,6 +48,8 @@ select tests.assert((select count(*) from public.sessions where invoice_id is no
 select public.record_invoice(inv, ids, lines) from req;
 select tests.assert((select count(*) from public.sessions where invoice_id = 'a2000000-0000-0000-0000-000000000001') = 2, 'both sessions claimed');
 select tests.assert((select count(*) from public.invoice_lines where invoice_id = 'a2000000-0000-0000-0000-000000000001') = 2, 'two lines stored');
+select tests.assert((select session_id from public.invoice_lines where invoice_id = 'a2000000-0000-0000-0000-000000000001' and line_no = 1) = 'a1000000-0000-0000-0000-000000000001', 'line order follows the request');
+select tests.assert((select amount from public.invoice_lines where line_no = 1 and invoice_id = 'a2000000-0000-0000-0000-000000000001') = 520.00, '8 h x $65 line stored as 520.00');
 select tests.assert((select amount from public.invoices where id = 'a2000000-0000-0000-0000-000000000001') = 819.00, 'amount stored');
 select tests.assert((select issued_at is not null from public.invoices where id = 'a2000000-0000-0000-0000-000000000001'), 'issued_at set');
 

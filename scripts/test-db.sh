@@ -60,6 +60,12 @@ for t in "$ROOT"/supabase/tests/[1-9]*.sql; do
   OUT=$(run -At -f "$t" 2>&1) || { echo "$OUT" >&2; echo "FAILED: $(basename "$t")" >&2; exit 1; }
   echo "$OUT" | grep -E "passed" || { echo "$OUT" >&2; echo "FAILED: $(basename "$t") produced no pass marker" >&2; exit 1; }
 done
+echo "== JS/SQL rounding parity (generated cases)"
+GEN=$(mktemp)
+node "$ROOT/scripts/gen-rounding-cases.mjs" > "$GEN"
+OUT=$(run -At -f "$GEN" 2>&1) || { echo "$OUT" | tail -5 >&2; echo "FAILED: rounding parity" >&2; exit 1; }
+echo "$OUT" | grep passed
+rm -f "$GEN"
 for t in "$ROOT"/supabase/tests/[1-9]*.sh; do
   TEST_DATABASE_URL="$TEST_DATABASE_URL" bash "$t"
 done
