@@ -94,10 +94,9 @@ export function useAuth() {
           setState({ status: 'recovery', user: toUser(session?.user), notice: null });
         } else if (event === 'SIGNED_OUT') {
           const was = userRef.current;
-          setState({
-            status: 'signed-out', user: null,
-            notice: was && !signingOut.current ? { kind: 'expired', email: was.email } : null,
-          });
+          const expired = was && !signingOut.current ? { kind: 'expired', email: was.email } : null;
+          // Keep a notice set by resolveSession(), which may have run first.
+          setState(s => ({ status: 'signed-out', user: null, notice: s.notice || expired }));
         } else if (session && ['SIGNED_IN', 'TOKEN_REFRESHED', 'USER_UPDATED'].includes(event)) {
           setState(s => (s.status === 'recovery'
             ? { ...s, user: toUser(session.user) }

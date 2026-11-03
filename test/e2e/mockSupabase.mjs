@@ -26,6 +26,7 @@ export function startMock({ port = 54321, tokenTtl = 3600 } = {}) {
   const t = name => (tables[name] ||= new Map());
   const log = [];
   let failNext = 0;
+  const opts = { requireConfirmation: false };
 
   function cors(res) {
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -67,8 +68,10 @@ export function startMock({ port = 54321, tokenTtl = 3600 } = {}) {
       if (users.has(body.email)) return send(res, 200, { id: randomUUID(), email: body.email, identities: [] });
       const u = { id: randomUUID(), email: body.email, password: body.password };
       users.set(body.email, u);
+      if (opts.requireConfirmation) return send(res, 200, { id: u.id, email: u.email, aud: 'authenticated', role: 'authenticated', identities: [{ id: u.id }], confirmation_sent_at: new Date().toISOString() });
       return send(res, 200, session(u));
     }
+    if (url.pathname === '/auth/v1/recover') return send(res, 200, {});
     if (url.pathname === '/auth/v1/token') {
       const grant = url.searchParams.get('grant_type');
       if (grant === 'password') {
@@ -87,6 +90,10 @@ export function startMock({ port = 54321, tokenTtl = 3600 } = {}) {
     if (url.pathname === '/auth/v1/user') {
       const c = claims(req);
       if (!c || c.expired) return send(res, 401, { msg: 'invalid JWT' });
+      if (req.method === 'PUT') {
+        const u = [...users.values()].find(x => x.id === c.sub);
+        if (body?.password) u.password = body.password;
+      }
       return send(res, 200, { id: c.sub, email: c.email, aud: 'authenticated', role: 'authenticated', app_metadata: {}, user_metadata: {} });
     }
 
@@ -159,6 +166,15 @@ export function startMock({ port = 54321, tokenTtl = 3600 } = {}) {
     server, tables, rows: n => [...t(n).values()], log,
     addUser(email, password) { const u = { id: randomUUID(), email, password }; users.set(email, u); return u; },
     failRequests(n) { failNext = n; },
+    options: opts,
+    revokeAllSessions() { refresh.clear(); },
+    // Hash fragment of a password-recovery email link (implicit flow).
+    recoveryHash(email) {
+      const u = users.get(email);
+      const s = session(u);
+      return `#access_token=${s.access_token}&expires_at=${s.expires_at}&expires_in=${s.expires_in}&refresh_token=${s.refresh_token}&token_type=bearer&type=recovery`;
+    },
+    passwordOf: email => users.get(email)?.password,
     close: () => new Promise(r => server.close(r)),
   })));
 }

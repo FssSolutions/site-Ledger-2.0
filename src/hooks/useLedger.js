@@ -5,7 +5,7 @@ import { createSyncEngine } from '../lib/sync.js';
 import { createRemote } from '../lib/remote.js';
 import { createAccountClient } from '../lib/supabaseClient.js';
 import { createActions, deriveView } from '../lib/ledgerActions.js';
-import { backupLegacyStorage, latestBackup } from '../lib/legacy.js';
+import { backupLegacyStorage, latestBackup, setBackupStatus } from '../lib/legacy.js';
 
 let dbPromise = null;
 export function getLocalDb() {
@@ -23,6 +23,26 @@ export function getLocalDb() {
 }
 
 const EMPTY = deriveView({});
+
+// The previous version kept the running break in localStorage. Carry it onto
+// the open session only when the old login token matches this account and
+// the break started after that session did.
+async function carryOverLegacyBreak(db, store, legacy, uid) {
+  const bs = legacy?.breakState;
+  if (!bs || legacy.breakApplied || legacy.ownerUid !== uid) return;
+  const active = deriveView((await store.loadAll()).data).active;
+  if (!active) return; // not on this device yet (first sync pending); try again later
+  const startMs = active ? Date.parse(active.start_time) : NaN;
+  const pausedAt = Number(bs.pausedAt) || null;
+  const totalMs = Number(bs.totalBreakMs) || 0;
+  if (active && !active.break_seconds && !active.break_started_at && (totalMs > 0 || pausedAt) && (!pausedAt || pausedAt > startMs)) {
+    await store.update('sessions', active.id, {
+      break_seconds: Math.floor(totalMs / 1000),
+      break_started_at: pausedAt ? new Date(pausedAt).toISOString() : null,
+    });
+  }
+  await setBackupStatus(db, legacy.key, legacy.status, { breakApplied: true });
+}
 const channel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('siteledger-data') : null;
 
 // Account-scoped ledger. Everything here belongs to `user.uid`; when the
@@ -85,8 +105,9 @@ export function useLedger(user, { online = true } = {}) {
         ctx.current = { uid, store, engine, remote, db };
         const legacy = legacyRecord || (await latestBackup(db));
         if (isCurrent()) setState(s => ({ ...s, legacy }));
+        await carryOverLegacyBreak(db, store, legacy, uid).catch(() => {});
         await reload();
-        engine.sync();
+        engine.sync().then(() => { if (isCurrent()) carryOverLegacyBreak(db, store, legacy, uid).catch(() => {}); });
       } catch (e) {
         if (alive) setState(s => ({ ...s, ready: true, storageError: e.message || 'Offline storage is unavailable.' }));
       }

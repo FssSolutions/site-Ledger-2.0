@@ -152,6 +152,43 @@ try {
   await waitFor(() => page.getByRole('heading', { name: 'Invoice recorded' }).isVisible(), 'success shown after the server confirmed');
 
   await context.close();
+
+  console.log('Authentication');
+  const ctx2 = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const p2 = await ctx2.newPage();
+  lastPage = p2;
+  p2.on('pageerror', e => { failures += 1; console.log('  PAGE ERROR', e.message); });
+  mock.options.requireConfirmation = true;
+  await p2.goto(BASE);
+  await p2.getByRole('tab', { name: 'Create Account' }).click();
+  await p2.getByLabel('Email').fill('new@example.test');
+  await p2.getByLabel('Password').fill('long-enough-pw');
+  await p2.locator('form').getByRole('button', { name: 'Create Account' }).click();
+  await waitFor(() => p2.getByText(/check your inbox|open the confirmation link/i).isVisible(), 'sign-up that needs email confirmation says so (no false sign-in)');
+  mock.options.requireConfirmation = false;
+
+  await p2.goto('about:blank'); // an email link opens a fresh page load
+  await p2.goto(`${BASE}/${mock.recoveryHash('a@example.test')}`);
+  await waitFor(() => p2.getByRole('heading', { name: 'Choose a new password' }).isVisible(), 'password-reset link opens the new-password screen');
+  await p2.getByLabel('New password', { exact: true }).fill('brand-new-pw-1');
+  await p2.getByLabel('Repeat new password').fill('brand-new-pw-1');
+  await p2.getByRole('button', { name: 'Save new password' }).click();
+  await waitFor(() => p2.getByRole('navigation', { name: 'Main' }).isVisible(), 'after saving the new password the user is signed in');
+  check(mock.passwordOf('a@example.test') === 'brand-new-pw-1', 'new password stored');
+  check(!(await p2.evaluate(() => location.hash)).includes('access_token'), 'tokens removed from the URL');
+
+  // Session revoked on the server while online: back to sign-in, with an explanation.
+  mock.revokeAllSessions();
+  await p2.evaluate(() => {
+    const s = JSON.parse(localStorage.getItem('sl-auth'));
+    s.expires_at = Math.floor(Date.now() / 1000) - 60;
+    localStorage.setItem('sl-auth', JSON.stringify(s));
+  });
+  await p2.reload();
+  await waitFor(() => p2.getByText(/Your session ended/).isVisible(), 'revoked session online: sign-in screen explains it ended', 20000);
+  await signIn(p2, 'a@example.test', 'brand-new-pw-1');
+  check(await p2.getByRole('navigation', { name: 'Main' }).isVisible(), 'sign in again with the new password');
+  await ctx2.close();
 } catch (e) {
   failures += 1;
   console.log('  FAIL unexpected error:', e.message.split('\n')[0]);
