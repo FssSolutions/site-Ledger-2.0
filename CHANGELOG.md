@@ -6,6 +6,28 @@ All notable changes to Site Ledger are documented here.
 
 ## [Unreleased]
 
+### Data safety and account isolation
+- On-device data and pending changes are stored per account in IndexedDB; a change is only ever uploaded under the account that made it. Sign-out keeps unsynced work under its account (after asking) and removes synced cache.
+- Offline edits use stable ids, merge before upload (offline clock-in/out = one session), retry without duplicates, and surface conflicts instead of overwriting.
+- New database migration: owner-only RLS on every table, ownership checks for related records, immutable owner, version columns, atomic `record_invoice()`, immutable invoice lines, voice quota. The historical "billed before Oct 25" backfill is now a manual, single-account script.
+
+### Billing
+- Customer invoices use the job's customer rate (8 h at $65 = $520), independent of employee wages. Reports separate billable, wages, expenses and gross margin.
+- Rates are snapshotted per session; recorded invoices keep their line amounts. Integer-cent rounding with GST rounded once per invoice.
+- Fixed-price jobs bill per person per day, with a warning for duplicate same-day entries; day type is kept on every save path; explicit $0 rates are kept.
+
+### Time and reports
+- Breaks stored separately from real start/end times; survive refresh and failed clock-out. Overnight entries are explicit.
+- Local-date handling for reports, expenses and mileage (no UTC shift). Per-worker BC overtime flags without double counting.
+- Mileage shows a year-aware, tiered CRA allowance estimate rather than a "deduction".
+
+### App
+- Auth via supabase-js: password reset completes in-app, sign-up confirmation handled, offline use with an expired token.
+- Complete versioned offline app shell; updates wait for the user. PDF tools and less-used screens load on demand.
+- Accessible dialogs, labelled inputs, visible focus, pinch zoom.
+- Voice entry: server-side quota, validated input/output, timeouts, cancel on close, no forced invoice intent.
+- CSV exports escape commas/quotes/line breaks and neutralise spreadsheet formulas.
+
 ---
 
 ## 2026-06-09
