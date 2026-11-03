@@ -1,180 +1,110 @@
+// Builds an invoice PDF from a RECORDED invoice and its stored lines, so the
+// PDF always matches what was recorded (rates, amounts, tax, total). Loaded on
+// demand; jsPDF is large.
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { calcDur, calcEarnings, fmtCAD } from './utils.js';
+import { fmtCAD } from './billing.js';
+import { unitLabel } from './billing.js';
 
 function hexToRgb(hex) {
-  if (typeof hex !== 'string') return [232, 101, 26];
-  const m = hex.trim().match(/^#?([0-9a-f]{3}|[0-9a-f]{6})$/i);
+  const m = typeof hex === 'string' && hex.trim().match(/^#?([0-9a-f]{3}|[0-9a-f]{6})$/i);
   if (!m) return [232, 101, 26];
   let h = m[1];
   if (h.length === 3) h = h.split('').map(c => c + c).join('');
   return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
 }
 
-export default function generateInvoice({ sessions, jobs, employees, dateRange, company, customer, invoiceNum, selectedJobIds, accentColor, taxRate }) {
-  const [rs, re] = dateRange;
-  const accentRgb = hexToRgb(accentColor);
-  const taxPct = Number.isFinite(taxRate) ? taxRate : 5;
+const cents = v => Math.round(Number(v || 0) * 100);
+const fmtQty = (q, unit) => (unit === 'hour' ? Number(q).toFixed(2) : Number(q) === 1 ? '1' : Number(q).toFixed(2));
+const pct = r => { const n = Number(r || 0); return Number.isInteger(n) ? String(n) : n.toFixed(3).replace(/\.?0+$/, ''); };
 
-  // Filter sessions by date range and optionally by selected jobs
-  const f = sessions.filter(s => {
-    if (!s.end_time) return false;
-    const t = new Date(s.start_time);
-    if (t < rs || t > re) return false;
-    if (selectedJobIds && selectedJobIds.length > 0) {
-      return selectedJobIds.includes(s.job_id);
-    }
-    return true;
-  });
-
+export function buildInvoicePdf({ invoice, lines, company = {}, customer = null, accentColor }) {
+  const accent = hexToRgb(accentColor);
   const doc = new jsPDF();
   const pw = doc.internal.pageSize.getWidth();
-
+  const ph = doc.internal.pageSize.getHeight();
   let y = 14;
 
-  // Company logo
   if (company.logo) {
-    try {
-      doc.addImage(company.logo, 'JPEG', 14, y, 30, 30);
-      y += 4; // text starts beside logo
-    } catch {
-      // skip logo if it fails
-    }
+    const fmt = /^data:image\/png/i.test(company.logo) ? 'PNG' : 'JPEG';
+    try { doc.addImage(company.logo, fmt, 14, y, 30, 30); } catch { /* skip an unreadable logo */ }
   }
+  const x0 = company.logo ? 50 : 14;
 
-  const logoOffset = company.logo ? 50 : 14;
-
-  // Header — INVOICE title
-  doc.setFontSize(22);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(accentRgb[0], accentRgb[1], accentRgb[2]);
-  doc.text('INVOICE', logoOffset, y + 8);
-
-  // Company info below title
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(60);
+  doc.setFontSize(22); doc.setFont('helvetica', 'bold'); doc.setTextColor(...accent);
+  doc.text('INVOICE', x0, y + 8);
+  doc.setFontSize(10); doc.setFont('helvetica', 'normal'); doc.setTextColor(60);
   let cy = y + 16;
-  if (company.name) { doc.setFont('helvetica', 'bold'); doc.text(company.name, logoOffset, cy); doc.setFont('helvetica', 'normal'); cy += 5; }
-  if (company.address) { doc.text(company.address, logoOffset, cy); cy += 5; }
-  if (company.phone) { doc.text(company.phone, logoOffset, cy); cy += 5; }
-  if (company.email) { doc.text(company.email, logoOffset, cy); cy += 5; }
-  if (company.gstNumber) { doc.text(`GST #: ${company.gstNumber}`, logoOffset, cy); cy += 5; }
-  if (company.worksafeNumber) { doc.text(`WorkSafe BC #: ${company.worksafeNumber}`, logoOffset, cy); cy += 5; }
+  const line = t => { doc.text(String(t), x0, cy); cy += 5; };
+  if (company.name) { doc.setFont('helvetica', 'bold'); line(company.name); doc.setFont('helvetica', 'normal'); }
+  if (company.address) line(company.address);
+  if (company.phone) line(company.phone);
+  if (company.email) line(company.email);
+  if (company.gstNumber) line(`GST #: ${company.gstNumber}`);
+  if (company.worksafeNumber) line(`WorkSafeBC #: ${company.worksafeNumber}`);
 
-  // Invoice details — right side
-  doc.setTextColor(100);
-  doc.text(`Invoice #: ${invoiceNum || 'INV-001'}`, pw - 14, y + 8, { align: 'right' });
-  doc.text(`Date: ${new Date().toLocaleDateString('en-CA')}`, pw - 14, y + 14, { align: 'right' });
-  doc.text(`Period: ${rs.toLocaleDateString('en-CA')} to ${re.toLocaleDateString('en-CA')}`, pw - 14, y + 20, { align: 'right' });
-
+  doc.setTextColor(90);
+  doc.text(`Invoice #: ${invoice.notes || ''}`, pw - 14, y + 8, { align: 'right' });
+  doc.text(`Date: ${invoice.date_generated || ''}`, pw - 14, y + 14, { align: 'right' });
+  if (invoice.date_range_start || invoice.date_range_end) {
+    doc.text(`Period: ${invoice.date_range_start || ''} to ${invoice.date_range_end || ''}`, pw - 14, y + 20, { align: 'right' });
+  }
   y = Math.max(cy, y + 28) + 6;
 
-  // Bill To
-  if (customer) {
-    doc.setTextColor(100);
-    doc.setFont('helvetica', 'normal');
-    doc.text('Bill To:', 14, y);
-    y += 6;
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(0);
-    doc.text(customer.name, 14, y);
-    doc.setFont('helvetica', 'normal');
-    y += 5;
+  const billName = customer?.name || invoice.customer_name;
+  if (billName) {
+    doc.setTextColor(100); doc.text('Bill To:', 14, y); y += 6;
+    doc.setFont('helvetica', 'bold'); doc.setTextColor(0); doc.text(billName, 14, y); doc.setFont('helvetica', 'normal'); y += 5;
     doc.setTextColor(60);
-    if (customer.address) { doc.text(customer.address, 14, y); y += 5; }
-    if (customer.phone) { doc.text(customer.phone, 14, y); y += 5; }
-    if (customer.email) { doc.text(customer.email, 14, y); y += 5; }
+    for (const t of [customer?.address, customer?.phone, customer?.email]) if (t) { doc.text(String(t), 14, y); y += 5; }
     y += 5;
   }
 
-  // Labour table
-  const labourRows = f.map(s => {
-    const j = jobs.find(x => x.id === s.job_id);
-    const emp = employees.find(x => x.id === s.employee_id);
-    const hrs = (calcDur(s) / 3600000).toFixed(2);
-    const earn = calcEarnings(s, jobs, employees, company);
-    const isFixed = j?.pricing_type === 'fixed';
-    const rateLabel = isFixed
-      ? (s.day_type === 'half' ? 'Half Day' : s.day_type === 'full' ? 'Full Day' : '—')
-      : fmtCAD(j?.rate || 0) + '/hr';
-    return [
-      new Date(s.start_time).toLocaleDateString('en-CA'),
-      j?.name || '',
-      emp?.name || 'Owner',
-      hrs,
-      rateLabel,
-      fmtCAD(earn)
-    ];
+  const body = lines.map(l => [
+    l.work_date || '', l.description || '', l.worker_name || 'Owner',
+    fmtQty(l.quantity, l.unit), unitLabel(l.unit), fmtCAD(cents(l.unit_price)), fmtCAD(cents(l.amount)),
+  ]);
+  doc.setFontSize(12); doc.setFont('helvetica', 'bold'); doc.setTextColor(0);
+  doc.text('Labour', 14, y); y += 4;
+  autoTable(doc, {
+    startY: y,
+    head: [['Date', 'Job', 'Worker', 'Qty', 'Unit', 'Rate', 'Amount']],
+    body,
+    theme: 'grid',
+    showHead: 'everyPage',
+    margin: { bottom: 20 },
+    headStyles: { fillColor: accent, textColor: 255, fontStyle: 'bold', fontSize: 9 },
+    styles: { fontSize: 8, cellPadding: 3 },
+    columnStyles: { 3: { halign: 'right' }, 5: { halign: 'right' }, 6: { halign: 'right' } },
   });
+  y = doc.lastAutoTable.finalY + 12;
 
-  const subtotal = f.reduce((s, x) => s + calcEarnings(x, jobs, employees, company), 0);
-  const totalHours = (f.reduce((s, x) => s + calcDur(x), 0) / 3600000).toFixed(2);
+  // Totals block: start a new page if it would not fit.
+  if (y + 40 > ph - 20) { doc.addPage(); y = 20; }
+  const sx = pw - 80;
+  const row = (label, value, bold = false) => {
+    doc.setFont('helvetica', bold ? 'bold' : 'normal');
+    doc.text(label, sx, y); doc.text(value, pw - 14, y, { align: 'right' }); y += 7;
+  };
+  doc.setFontSize(10); doc.setTextColor(60);
+  row('Subtotal:', fmtCAD(cents(invoice.subtotal)));
+  row(`GST (${pct(invoice.tax_rate)}%):`, fmtCAD(cents(invoice.tax_amount)));
+  doc.setDrawColor(...accent); doc.setLineWidth(0.5); doc.line(sx, y - 3, pw - 14, y - 3); y += 4;
+  doc.setFontSize(14); doc.setTextColor(0);
+  row('Total Due:', fmtCAD(cents(invoice.calculated_total)), true);
+  if (company.gstNumber) { doc.setFontSize(8); doc.setFont('helvetica', 'normal'); doc.setTextColor(130); doc.text(`GST Registration: ${company.gstNumber}`, sx, y); }
 
-  if (labourRows.length > 0) {
-    doc.setFontSize(12);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(0);
-    doc.text('Labour', 14, y);
-    y += 4;
-
-    autoTable(doc, {
-      startY: y,
-      head: [['Date', 'Job', 'Employee', 'Hours', 'Rate', 'Amount']],
-      body: labourRows,
-      foot: [['', '', 'Subtotal', totalHours, '', fmtCAD(subtotal)]],
-      theme: 'grid',
-      headStyles: { fillColor: accentRgb, textColor: 255, fontStyle: 'bold', fontSize: 9 },
-      footStyles: { fillColor: [245, 245, 245], textColor: [0, 0, 0], fontStyle: 'bold', fontSize: 9 },
-      styles: { fontSize: 8, cellPadding: 3 },
-      columnStyles: { 3: { halign: 'right' }, 4: { halign: 'right' }, 5: { halign: 'right' } },
-    });
-
-    y = doc.lastAutoTable.finalY + 12;
+  const pages = doc.getNumberOfPages();
+  for (let i = 1; i <= pages; i++) {
+    doc.setPage(i);
+    doc.setFontSize(8); doc.setFont('helvetica', 'normal'); doc.setTextColor(150);
+    doc.text('Generated by SiteLedger', 14, ph - 10);
+    doc.text(`Page ${i} of ${pages}`, pw - 14, ph - 10, { align: 'right' });
   }
+  return doc;
+}
 
-  // GST + Total summary
-  const gst = subtotal * (taxPct / 100);
-  const grandTotal = subtotal + gst;
-
-  const summaryX = pw - 80;
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(60);
-  doc.text('Subtotal:', summaryX, y);
-  doc.text(fmtCAD(subtotal), pw - 14, y, { align: 'right' });
-  y += 7;
-  const taxLabel = `GST (${Number.isInteger(taxPct) ? taxPct : taxPct.toFixed(2).replace(/\.?0+$/, '')}%):`;
-  doc.text(taxLabel, summaryX, y);
-  doc.text(fmtCAD(gst), pw - 14, y, { align: 'right' });
-  y += 4;
-
-  doc.setDrawColor(accentRgb[0], accentRgb[1], accentRgb[2]);
-  doc.setLineWidth(0.5);
-  doc.line(summaryX, y, pw - 14, y);
-  y += 8;
-
-  doc.setFontSize(14);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(0);
-  doc.text('Total Due:', summaryX, y);
-  doc.text(fmtCAD(grandTotal), pw - 14, y, { align: 'right' });
-
-  // GST number reminder at bottom of totals
-  if (company.gstNumber) {
-    y += 8;
-    doc.setFontSize(8);
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(130);
-    doc.text(`GST Registration: ${company.gstNumber}`, summaryX, y);
-  }
-
-  // Footer
-  const ph = doc.internal.pageSize.getHeight();
-  doc.setFontSize(8);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(150);
-  doc.text('Generated by SiteLedger', 14, ph - 10);
-
-  doc.save(`invoice-${invoiceNum || 'draft'}-${rs.toLocaleDateString('en-CA')}.pdf`);
+export default function generateInvoice(args) {
+  const doc = buildInvoicePdf(args);
+  doc.save(`invoice-${args.invoice.notes || 'draft'}-${args.invoice.date_generated || ''}.pdf`.replace(/[^\w.-]+/g, '_'));
 }

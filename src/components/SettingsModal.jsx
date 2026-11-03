@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import { Modal, ModalHeader } from './Modal.jsx';
 import { inp, lbl } from '../styles.js';
 
@@ -7,7 +8,9 @@ const PRESETS = [
   '#111111',
 ];
 
-export default function SettingsModal({ accentColor, onAccentChange, taxRate, onTaxChange, reminderTime, onReminderChange, onClose }) {
+export default function SettingsModal({ prefs, onClose }) {
+  const id = useId();
+  const { accentColor, setAccentColor: onAccentChange, taxRate, setTaxRate: onTaxChange, reminderTime, setReminderTime: onReminderChange, otEnabled, setOtEnabled } = prefs;
   return (
     <Modal onClose={onClose}>
       <ModalHeader title="Settings" subtitle="Personalize your SiteLedger" onClose={onClose} />
@@ -50,9 +53,10 @@ export default function SettingsModal({ accentColor, onAccentChange, taxRate, on
       </div>
 
       <div style={{ marginBottom: 24 }}>
-        <label style={lbl}>Clock-Out Reminder</label>
-        <div style={{ color: '#aaa', fontSize: 11, marginBottom: 8 }}>Alert when you're still clocked in after this time.</div>
+        <label htmlFor={`${id}-rem`} style={lbl}>Clock-Out Reminder</label>
+        <div style={{ color: '#666', fontSize: 12, marginBottom: 8 }}>Shows an alert if you're still clocked in after this time. It only works while SiteLedger is open on screen — it is not a phone notification and will not fire when the app is closed or the phone is locked.</div>
         <input
+          id={`${id}-rem`}
           type="time"
           value={reminderTime || ''}
           onChange={e => onReminderChange(e.target.value)}
@@ -67,8 +71,9 @@ export default function SettingsModal({ accentColor, onAccentChange, taxRate, on
       </div>
 
       <div style={{ marginBottom: 8 }}>
-        <label style={lbl}>Tax Rate (GST %)</label>
+        <label htmlFor={`${id}-tax`} style={lbl}>Tax Rate (GST %)</label>
         <input
+          id={`${id}-tax`}
           type="number"
           min="0"
           max="100"
@@ -81,7 +86,17 @@ export default function SettingsModal({ accentColor, onAccentChange, taxRate, on
           style={inp}
         />
         <div style={{ color: '#aaa', fontSize: 11, marginTop: 6 }}>
-          Applied to generated invoices. BC default is 5% (GST).
+          Applied to new invoices (rounded once on the subtotal, to the cent). Recorded invoices keep the rate they were issued with. GST is 5%.
+        </div>
+      </div>
+
+      <div style={{ marginBottom: 8, marginTop: 20 }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 14, color: '#333', cursor: 'pointer' }}>
+          <input type="checkbox" checked={otEnabled} onChange={e => setOtEnabled(e.target.checked)} style={{ width: 20, height: 20 }} />
+          Show overtime flags
+        </label>
+        <div style={{ color: '#666', fontSize: 12, marginTop: 6 }}>
+          Per worker, BC rules: over 8 h a day (double over 12 h), over 40 h in a Sunday–Saturday week not already counted daily. These are reminders, not payroll calculations.
         </div>
       </div>
 

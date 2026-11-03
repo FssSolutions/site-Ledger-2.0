@@ -30,18 +30,26 @@ export default function VoiceEntryModal({ jobs, onProcess, onDraft, onClose, onl
   const chunksRef = useRef([]);
   const timerRef = useRef(null);
   const elapsedRef = useRef(0);
+  const abortRef = useRef(null);
+  const closedRef = useRef(false);
   const [state, setState] = useState('idle');
   const [elapsed, setElapsed] = useState(0);
   const [error, setError] = useState('');
   const [memo, setMemo] = useState('');
 
   const supported = typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia && !!window.MediaRecorder;
-  const canRecord = supported && online && jobs.length > 0 && state !== 'processing';
+  const canRecord = supported && jobs.length > 0 && state !== 'processing';
 
+  // Closing the modal stops the microphone, cancels any upload, and ignores
+  // a result that arrives afterwards.
   useEffect(() => {
+    closedRef.current = false;
     return () => {
+      closedRef.current = true;
       clearInterval(timerRef.current);
+      if (recorderRef.current?.state === 'recording') { recorderRef.current.onstop = null; recorderRef.current.stop(); }
       streamRef.current?.getTracks().forEach(track => track.stop());
+      abortRef.current?.abort();
     };
   }, []);
 
@@ -62,6 +70,7 @@ export default function VoiceEntryModal({ jobs, onProcess, onDraft, onClose, onl
       };
       recorder.onstop = () => {
         clearInterval(timerRef.current);
+        if (closedRef.current) { stream.getTracks().forEach(track => track.stop()); return; }
         stream.getTracks().forEach(track => track.stop());
         streamRef.current = null;
         processRecording(mimeType || recorder.mimeType || 'audio/webm');
@@ -106,17 +115,23 @@ export default function VoiceEntryModal({ jobs, onProcess, onDraft, onClose, onl
     }
 
     setState('processing');
+    const ctl = new AbortController();
+    abortRef.current = ctl;
     try {
-      const result = await onProcess(blob, { mimeType, elapsedSeconds: elapsedRef.current });
-      if (result?.error) {
-        setError(result.error.message || 'Could not process the voice note.');
+      const result = await onProcess(blob, { mimeType, elapsedSeconds: elapsedRef.current }, ctl.signal);
+      if (closedRef.current || ctl.signal.aborted) return;
+      if (!result?.ok) {
+        setError(result?.error || 'Could not process the voice note.');
         setState('idle');
         return;
       }
-      onDraft(result);
+      onDraft(result.data);
     } catch {
+      if (closedRef.current) return;
       setError('Could not process the voice note. You can still add the entry manually.');
       setState('idle');
+    } finally {
+      if (abortRef.current === ctl) abortRef.current = null;
     }
   }
 
@@ -135,6 +150,9 @@ export default function VoiceEntryModal({ jobs, onProcess, onDraft, onClose, onl
     <Modal onClose={onClose}>
       <ModalHeader title="Voice Entry" subtitle="Record a work note" onClose={onClose} />
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {state === 'processing' && (
+          <button type="button" onClick={() => { abortRef.current?.abort(); setState('idle'); }} style={{ padding: '10px', borderRadius: 10, border: '1px solid #ddd', background: '#fff', fontWeight: 700 }}>Cancel processing</button>
+        )}
         <div style={{ border: `1.5px solid ${state === 'recording' ? accent : '#e8e8e8'}`, borderRadius: 14, padding: 18, background: state === 'recording' ? `${accent}12` : '#fafafa', textAlign: 'center' }}>
           <button
             onClick={state === 'recording' ? stopRecording : startRecording}
@@ -151,13 +169,14 @@ export default function VoiceEntryModal({ jobs, onProcess, onDraft, onClose, onl
         </div>
 
         {!supported && <div style={{ color: '#c0392b', fontSize: 12, padding: '10px 12px', background: '#fde8e8', borderRadius: 8 }}>This browser does not support audio recording.</div>}
-        {!online && <div style={{ color: '#c87020', fontSize: 12, padding: '10px 12px', background: '#fff8f0', borderRadius: 8 }}>Voice processing needs internet. Manual entries still work offline.</div>}
+        {!online && <div style={{ color: '#7a4a10', fontSize: 12, padding: '10px 12px', background: '#fff8f0', borderRadius: 8 }}>You may be offline. Voice processing needs internet; manual entries work offline.</div>}
         {jobs.length === 0 && <div style={{ color: '#c87020', fontSize: 12, padding: '10px 12px', background: '#fff8f0', borderRadius: 8 }}>Add an active job before using voice entries.</div>}
         {error && <div style={{ color: '#c0392b', fontSize: 12, padding: '10px 12px', background: '#fde8e8', borderRadius: 8 }}>{error}</div>}
 
         <div>
-          <label style={lbl}>Fallback note</label>
+          <label htmlFor="voice-fallback" style={lbl}>Or type it instead</label>
           <textarea
+            id="voice-fallback"
             value={memo}
             onChange={e => setMemo(e.target.value)}
             placeholder="Type what you would have said..."

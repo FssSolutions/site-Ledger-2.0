@@ -1,24 +1,31 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { api } from './lib/api.js';
-import { loadAuth, saveAuth, clearAuth } from './lib/auth.js';
-import { cacheData, loadCachedData, enqueue, getQueue, removeFromQueue, isOnline } from './lib/offline.js';
+import { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react';
 import { ib } from './styles.js';
 import Icon from './components/Icon.jsx';
 import Toast from './components/Toast.jsx';
-import OfflineBanner from './components/OfflineBanner.jsx';
-import AuthScreen from './pages/AuthScreen.jsx';
+import SyncStatus from './components/SyncStatus.jsx';
+import PendingChangesModal from './components/PendingChangesModal.jsx';
+import LegacyReview from './components/LegacyReview.jsx';
+import UpdateBanner from './components/UpdateBanner.jsx';
+import { ConfirmDialog } from './components/Modal.jsx';
+import AuthScreen, { NewPasswordScreen } from './pages/AuthScreen.jsx';
 import DashboardTab from './pages/DashboardTab.jsx';
 import ClockTab from './pages/ClockTab.jsx';
 import CalendarTab from './pages/CalendarTab.jsx';
-import MileageTab from './pages/MileageTab.jsx';
-import ReportsTab from './pages/ReportsTab.jsx';
-import JobsTab from './pages/JobsTab.jsx';
-import CompanyTab from './pages/CompanyTab.jsx';
-import ExpensesTab from './pages/ExpensesTab.jsx';
 import { useWindowWidth } from './hooks/useWindowWidth.js';
+import { useAuth } from './hooks/useAuth.js';
+import { useLedger } from './hooks/useLedger.js';
+import { usePrefs } from './hooks/usePrefs.js';
 import AccentColorContext from './lib/AccentColorContext.js';
 import SettingsModal from './components/SettingsModal.jsx';
-import InvoiceModal from './components/InvoiceModal.jsx';
+import { processVoiceEntry } from './lib/voiceApi.js';
+
+// Less-used screens load on demand (all are precached for offline use).
+const MileageTab = lazy(() => import('./pages/MileageTab.jsx'));
+const ExpensesTab = lazy(() => import('./pages/ExpensesTab.jsx'));
+const ReportsTab = lazy(() => import('./pages/ReportsTab.jsx'));
+const JobsTab = lazy(() => import('./pages/JobsTab.jsx'));
+const CompanyTab = lazy(() => import('./pages/CompanyTab.jsx'));
+const InvoiceModal = lazy(() => import('./components/InvoiceModal.jsx'));
 
 const TABS = [
   { id: 'home', l: 'Home', i: 'home' },
@@ -30,795 +37,278 @@ const TABS = [
   { id: 'jobs', l: 'Jobs', i: 'note' },
   { id: 'company', l: 'Company', i: 'building' },
 ];
-
 const NAV_PRIMARY = ['home', 'clock', 'calendar', 'reports'];
 const NAV_MORE = ['mileage', 'expenses', 'jobs', 'company'];
 
-function companyToDb(d) {
-  return {
-    name: d.name || null, phone: d.phone || null, email: d.email || null,
-    address: d.address || null, gst_number: d.gstNumber || null,
-    worksafe_number: d.worksafeNumber || null, logo: d.logo || null,
-    half_day_rate: d.halfDayRate ? parseFloat(d.halfDayRate) : null,
-    full_day_rate: d.fullDayRate ? parseFloat(d.fullDayRate) : null,
-  };
+function useOnlineHint() {
+  const [online, setOnline] = useState(() => (typeof navigator === 'undefined' ? true : navigator.onLine));
+  useEffect(() => {
+    const up = () => setOnline(true);
+    const down = () => setOnline(false);
+    window.addEventListener('online', up);
+    window.addEventListener('offline', down);
+    return () => { window.removeEventListener('online', up); window.removeEventListener('offline', down); };
+  }, []);
+  return online;
 }
 
-function companyFromDb(r) {
-  return {
-    id: r.id, name: r.name || '', phone: r.phone || '', email: r.email || '',
-    address: r.address || '', gstNumber: r.gst_number || '',
-    worksafeNumber: r.worksafe_number || '', logo: r.logo || '',
-    halfDayRate: r.half_day_rate ?? '', fullDayRate: r.full_day_rate ?? '',
-  };
-}
+const Centered = ({ children }) => (
+  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '80px 24px', color: '#777', fontSize: 14, textAlign: 'center' }}>{children}</div>
+);
 
 export default function App() {
-  const [authData, setAuthData] = useState(() => loadAuth());
-  const [jobs, setJobs] = useState([]);
-  const [sessions, setSessions] = useState([]);
-  const [employees, setEmployees] = useState([]);
-  const [mileage, setMileage] = useState([]);
-  const [company, setCompany] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('sl_company') || '{}'); } catch { return {}; }
-  });
-  const [customers, setCustomers] = useState([]);
-  const [expenses, setExpenses] = useState([]);
-  const [invoices, setInvoices] = useState([]);
-  const [active, setActive] = useState(null);
-  const [breakState, setBreakState] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('sl_break_state')) || { pausedAt: null, totalBreakMs: 0 }; }
-    catch { return { pausedAt: null, totalBreakMs: 0 }; }
-  });
-  const [tab, setTab] = useState(() => localStorage.getItem('sl_default_tab') || 'home');
+  const auth = useAuth();
+  const prefs = usePrefs();
+  const online = useOnlineHint();
+  const user = auth.status === 'signed-in' || auth.status === 'offline' ? auth.user : null;
+  const ledger = useLedger(user, { online });
+  const [tab, setTab] = useState(() => { try { return localStorage.getItem('sl_default_tab') || 'home'; } catch { return 'home'; } });
   const [showMore, setShowMore] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [loadError, setLoadError] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [showPending, setShowPending] = useState(false);
+  const [confirm, setConfirm] = useState(null);
+  const [voiceInvoiceRequest, setVoiceInvoiceRequest] = useState(null);
   const [toasts, setToasts] = useState([]);
-  const [online, setOnline] = useState(isOnline());
-  const [syncing, setSyncing] = useState(false);
-  const [queueCount, setQueueCount] = useState(getQueue().length);
-  const syncingRef = useRef(false);
-  const token = authData?.access_token;
+  const toastSeq = useRef(0);
   const width = useWindowWidth();
   const isDesktop = width >= 768;
-  const [accentColor, setAccentColor] = useState(() => localStorage.getItem('sl_accent_color') || '#E8651A');
-  const [taxRate, setTaxRate] = useState(() => parseFloat(localStorage.getItem('sl_tax_rate') || '5'));
-  const [reminderTime, setReminderTime] = useState(() => localStorage.getItem('sl_reminder_time') || '');
-  const [showSettings, setShowSettings] = useState(false);
-  const [voiceInvoiceRequest, setVoiceInvoiceRequest] = useState(null);
-  const reminderFiredRef = useRef('');
+  const { view } = ledger;
 
-  useEffect(() => { localStorage.setItem('sl_accent_color', accentColor); }, [accentColor]);
-  useEffect(() => { localStorage.setItem('sl_tax_rate', String(taxRate)); }, [taxRate]);
-  useEffect(() => { localStorage.setItem('sl_reminder_time', reminderTime); }, [reminderTime]);
-  useEffect(() => { localStorage.setItem('sl_break_state', JSON.stringify(breakState)); }, [breakState]);
+  const toast = useCallback((message, type = 'error') => {
+    const id = ++toastSeq.current;
+    setToasts(p => [...p, { id, message, type }]);
+  }, []);
+  const removeToast = id => setToasts(p => p.filter(t => t.id !== id));
 
   useEffect(() => {
-    if (!active || !reminderTime) return;
-    function checkReminder() {
+    if (auth.notice?.kind === 'password-updated') { toast('Password updated.', 'success'); auth.dismissNotice(); }
+  }, [auth.notice]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Reminder: only fires while the app is open (see Settings).
+  const reminderFired = useRef('');
+  useEffect(() => {
+    if (!view.active || !prefs.reminderTime) return undefined;
+    function check() {
       const now = new Date();
-      const [rh, rm] = reminderTime.split(':').map(Number);
-      const todayKey = now.toDateString();
-      if ((now.getHours() > rh || (now.getHours() === rh && now.getMinutes() >= rm)) && reminderFiredRef.current !== todayKey) {
-        reminderFiredRef.current = todayKey;
+      const [rh, rm] = prefs.reminderTime.split(':').map(Number);
+      const key = now.toDateString();
+      if ((now.getHours() > rh || (now.getHours() === rh && now.getMinutes() >= rm)) && reminderFired.current !== key) {
+        reminderFired.current = key;
         toast("You're still clocked in — don't forget to clock out!", 'info');
       }
     }
-    checkReminder();
-    const id = setInterval(checkReminder, 60000);
+    check();
+    const id = setInterval(check, 60000);
     return () => clearInterval(id);
-  }, [active, reminderTime]);
+  }, [view.active, prefs.reminderTime, toast]);
 
-  function toast(message, type = 'error') {
-    const id = Date.now();
-    setToasts(p => [...p, { id, message, type }]);
+  // Runs an action and reports failures; returns the result so forms can
+  // stay open with their draft on failure.
+  const run = useCallback(async (p, successMsg) => {
+    const r = await p;
+    if (!r.ok) toast(r.error);
+    else if (successMsg) toast(successMsg, 'success');
+    return r;
+  }, [toast]);
+
+  async function finishSignOut() {
+    setConfirm(null);
+    await ledger.prepareSignOut();
+    await auth.signOut();
+    // Reload drops every in-memory record and any in-flight request.
+    window.location.reload();
   }
 
-  function removeToast(id) {
-    setToasts(p => p.filter(t => t.id !== id));
-  }
-
-  // --- Online/offline detection ---
-  useEffect(() => {
-    function goOnline() { setOnline(true); }
-    function goOffline() { setOnline(false); }
-    window.addEventListener('online', goOnline);
-    window.addEventListener('offline', goOffline);
-    return () => { window.removeEventListener('online', goOnline); window.removeEventListener('offline', goOffline); };
-  }, []);
-
-  // --- Token refresh ---
-  async function tryRefresh() {
-    const rt = authData?.refresh_token;
-    if (!rt) return null;
-    const d = await api.refreshToken(rt);
-    if (d.access_token) { saveAuth(d); setAuthData(d); return d.access_token; }
-    clearAuth(); setAuthData(null); return null;
-  }
-
-  async function withRefresh(fn) {
-    let result = await fn(token);
-    if (result && result._expired) {
-      const newToken = await tryRefresh();
-      if (newToken) result = await fn(newToken);
-      else return null;
-    }
-    return result;
-  }
-
-  useEffect(() => {
-    if (!authData?.refresh_token) return;
-    const interval = setInterval(() => { tryRefresh(); }, 50 * 60 * 1000);
-    return () => clearInterval(interval);
-  }, [authData?.refresh_token]);
-
-  // --- Cache data whenever it changes ---
-  useEffect(() => {
-    if (jobs.length || sessions.length || employees.length || mileage.length || customers.length || company?.name) {
-      cacheData({ jobs, sessions, employees, mileage, customers, expenses, invoices, active, company });
-    }
-  }, [jobs, sessions, employees, mileage, customers, expenses, invoices, active, company]);
-
-  // --- Load data (with offline fallback) ---
-  const loadData = useCallback(async () => {
-    if (!token) return;
-    setLoading(true);
-    setLoadError(false);
-
-    if (!isOnline()) {
-      const cached = loadCachedData();
-      if (cached) {
-        setJobs(cached.jobs || []);
-        setSessions(cached.sessions || []);
-        setEmployees(cached.employees || []);
-        setMileage(cached.mileage || []);
-        setCustomers(cached.customers || []);
-        setExpenses(cached.expenses || []);
-        setInvoices(cached.invoices || []);
-        if (cached.company) setCompany(cached.company);
-        setActive(cached.active || null);
-        toast('Loaded from cache — you are offline.', 'info');
-      } else {
-        setLoadError(true);
-        toast('No internet and no cached data available.');
-      }
-      setLoading(false);
+  function requestSignOut() {
+    const n = ledger.pendingCount;
+    if (n === 0) {
+      setConfirm({
+        title: 'Sign out?',
+        message: 'Your synced records will be removed from this device. Sign in again (needs internet) to see them.',
+        actions: [
+          { label: 'Sign out', primary: true, onClick: finishSignOut },
+          { label: 'Cancel', autoFocus: true, onClick: () => setConfirm(null) },
+        ],
+      });
       return;
     }
-
-    try {
-      const [j, s, e, m, c, cp, exp, inv] = await Promise.all([
-        withRefresh(t => api.select(t, 'jobs')),
-        withRefresh(t => api.select(t, 'sessions')),
-        withRefresh(t => api.select(t, 'employees')),
-        withRefresh(t => api.select(t, 'mileage')),
-        withRefresh(t => api.select(t, 'customers')),
-        withRefresh(t => api.select(t, 'company_profiles')),
-        withRefresh(t => api.select(t, 'expenses')),
-        withRefresh(t => api.select(t, 'invoices')),
-      ]);
-      const anyFailed = [j, s, e, m, c, cp].some(x => x === null || x?._expired);
-      if (anyFailed) {
-        const cached = loadCachedData();
-        if (cached) {
-          setJobs(cached.jobs || []); setSessions(cached.sessions || []);
-          setEmployees(cached.employees || []); setMileage(cached.mileage || []);
-          setCustomers(cached.customers || []);
-          setExpenses(cached.expenses || []);
-          setInvoices(cached.invoices || []);
-          if (cached.company) setCompany(cached.company);
-          setActive(cached.active || null);
-          toast('Could not reach server — showing cached data.');
-        } else {
-          setLoadError(true);
-          toast('Could not load your data. Check your connection and try again.');
-        }
-      } else {
-        if (Array.isArray(j)) setJobs(j);
-        if (Array.isArray(s)) { setSessions(s.filter(x => x.end_time)); setActive(s.find(x => !x.end_time) || null); }
-        if (Array.isArray(e)) setEmployees(e);
-        if (Array.isArray(m)) setMileage(m);
-        if (Array.isArray(c)) setCustomers(c);
-        if (Array.isArray(exp)) setExpenses(exp);
-        if (Array.isArray(inv)) setInvoices(inv);
-        if (Array.isArray(cp) && cp[0]) {
-          const mapped = companyFromDb(cp[0]);
-          setCompany(mapped);
-          localStorage.setItem('sl_company', JSON.stringify(mapped));
-        }
-      }
-    } catch {
-      const cached = loadCachedData();
-      if (cached) {
-        setJobs(cached.jobs || []); setSessions(cached.sessions || []);
-        setEmployees(cached.employees || []); setMileage(cached.mileage || []);
-        setCustomers(cached.customers || []);
-        setExpenses(cached.expenses || []);
-        setInvoices(cached.invoices || []);
-        if (cached.company) setCompany(cached.company);
-        setActive(cached.active || null);
-        toast('Network error — showing cached data.');
-      } else {
-        setLoadError(true);
-        toast('Network error. Please check your connection.');
-      }
-    }
-    setLoading(false);
-  }, [token]);
-
-  useEffect(() => { loadData(); }, [loadData]);
-
-  // --- Sync queue when coming back online ---
-  async function syncQueue() {
-    if (syncingRef.current) return;
-    const queue = getQueue();
-    if (queue.length === 0) return;
-    syncingRef.current = true;
-    setSyncing(true);
-    setQueueCount(queue.length);
-
-    let userId = null;
-    try {
-      const u = await withRefresh(t => api.user(t));
-      userId = u?.id;
-    } catch {}
-
-    for (const op of queue) {
-      try {
-        if (op.type === 'insert') {
-          const body = userId ? { ...op.body, user_id: userId } : op.body;
-          await withRefresh(t => api.insert(t, op.table, body));
-        } else if (op.type === 'update') {
-          await withRefresh(t => api.update(t, op.table, op.recordId, op.body));
-        } else if (op.type === 'delete') {
-          await withRefresh(t => api.delete(t, op.table, op.recordId));
-        } else if (op.type === 'upsert_company') {
-          const body = userId ? { ...op.body, user_id: userId } : op.body;
-          await withRefresh(t => api.upsert(t, 'company_profiles', body));
-        }
-        removeFromQueue(op.id);
-        setQueueCount(getQueue().length);
-      } catch {
-        break;
-      }
-    }
-
-    syncingRef.current = false;
-    setSyncing(false);
-    setQueueCount(getQueue().length);
-
-    if (getQueue().length === 0) {
-      toast('All changes synced!', 'success');
-      loadData();
-    }
+    setConfirm({
+      title: `${n} change${n === 1 ? '' : 's'} not synced yet`,
+      message: `They stay saved on this device and will upload the next time ${auth.user?.email || 'this account'} signs in here. Anyone using this phone could see them in the browser's storage. Signing in again needs internet.`,
+      actions: [
+        { label: 'Try to sync first', primary: true, autoFocus: true, onClick: async () => { setConfirm(null); await ledger.syncNow(); setShowPending(true); } },
+        { label: 'Sign out and keep changes on this device', onClick: finishSignOut },
+        { label: 'Cancel', onClick: () => setConfirm(null) },
+      ],
+    });
   }
 
-  useEffect(() => {
-    if (online && token) syncQueue();
-  }, [online, token]);
+  if (auth.status === 'unconfigured') {
+    return <Centered><b>SiteLedger is not configured.</b><br />Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY (see README).</Centered>;
+  }
+  if (auth.status === 'loading') return <Centered>Loading…</Centered>;
+  if (auth.status === 'recovery') return <AccentColorContext.Provider value={prefs.accentColor}><NewPasswordScreen auth={auth} /></AccentColorContext.Provider>;
+  if (!user) return <AccentColorContext.Provider value={prefs.accentColor}><AuthScreen auth={auth} /></AccentColorContext.Provider>;
 
-  // --- Offline-aware mutation helpers ---
-  function offlineInsert(table, body, optimisticUpdate) {
-    if (!isOnline()) {
-      enqueue({ type: 'insert', table, body });
-      setQueueCount(getQueue().length);
-      if (optimisticUpdate) optimisticUpdate();
-      return true;
-    }
-    return false;
-  }
-
-  function offlineUpdate(table, recordId, body, optimisticUpdate) {
-    if (!isOnline()) {
-      enqueue({ type: 'update', table, recordId, body });
-      setQueueCount(getQueue().length);
-      if (optimisticUpdate) optimisticUpdate();
-      return true;
-    }
-    return false;
-  }
-
-  function offlineDelete(table, recordId, optimisticUpdate) {
-    if (!isOnline()) {
-      enqueue({ type: 'delete', table, recordId });
-      setQueueCount(getQueue().length);
-      if (optimisticUpdate) optimisticUpdate();
-      return true;
-    }
-    return false;
-  }
-
-  // --- Data mutations ---
-  async function clockIn(jobId, empId) {
-    setBreakState({ pausedAt: null, totalBreakMs: 0 });
-    const startTime = new Date().toISOString();
-    const body = { job_id: jobId, employee_id: empId || null, start_time: startTime };
-
-    if (offlineInsert('sessions', body, () => {
-      const tempId = 'temp-' + Date.now();
-      setActive({ ...body, id: tempId });
-    })) return;
-
-    setBusy(true);
-    try {
-      const u = await withRefresh(t => api.user(t));
-      if (!u?.id) { toast('Failed to clock in. Please try again.'); setBusy(false); return; }
-      const r = await withRefresh(t => api.insert(t, 'sessions', { ...body, user_id: u.id }));
-      if (Array.isArray(r) && r[0]) setActive(r[0]);
-      else toast('Failed to clock in. Please try again.');
-    } catch { toast('Network error. Could not clock in.'); }
-    setBusy(false);
-  }
-
-  async function clockOut(customEndTime, dayType) {
-    if (!active) return;
-    let endTime;
-    if (customEndTime) {
-      endTime = customEndTime;
-    } else {
-      const effectiveNow = breakState.pausedAt ? breakState.pausedAt : Date.now();
-      endTime = new Date(effectiveNow - breakState.totalBreakMs).toISOString();
-    }
-    setBreakState({ pausedAt: null, totalBreakMs: 0 });
-    const patch = { end_time: endTime, day_type: dayType || null };
-
-    if (active.id?.toString().startsWith('temp-')) {
-      enqueue({ type: 'insert', table: 'sessions', body: { ...active, ...patch } });
-      setQueueCount(getQueue().length);
-      setSessions(p => [...p, { ...active, ...patch }]);
-      setActive(null);
-      return;
-    }
-
-    if (offlineUpdate('sessions', active.id, patch, () => {
-      setSessions(p => [...p, { ...active, ...patch }]);
-      setActive(null);
-    })) return;
-
-    setBusy(true);
-    try {
-      const r = await withRefresh(t => api.update(t, 'sessions', active.id, patch));
-      if (Array.isArray(r) && r[0]) { setSessions(p => [...p, r[0]]); setActive(null); }
-      else toast('Failed to clock out. Please try again.');
-    } catch { toast('Network error. Could not clock out.'); }
-    setBusy(false);
-  }
-
-  function pauseTimer() {
-    setBreakState(p => ({ ...p, pausedAt: Date.now() }));
-  }
-
-  function resumeTimer() {
-    setBreakState(p => ({
-      totalBreakMs: p.totalBreakMs + (p.pausedAt ? Date.now() - p.pausedAt : 0),
-      pausedAt: null
-    }));
-  }
-
-  async function saveSession(sess, onDone) {
-    if (sess.id) {
-      const body = { job_id: sess.job_id, employee_id: sess.employee_id, start_time: sess.start_time, end_time: sess.end_time, notes: sess.notes || null };
-      if (offlineUpdate('sessions', sess.id, body, () => {
-        setSessions(p => p.map(s => s.id === sess.id ? { ...s, ...body } : s));
-        if (onDone) onDone();
-      })) return;
-    } else {
-      const body = { job_id: sess.job_id, employee_id: sess.employee_id, start_time: sess.start_time, end_time: sess.end_time, notes: sess.notes || null };
-      if (offlineInsert('sessions', body, () => {
-        setSessions(p => [...p, { ...body, id: 'temp-' + Date.now() }]);
-        if (onDone) onDone();
-      })) return;
-    }
-
-    setBusy(true);
-    try {
-      if (sess.id) {
-        const r = await withRefresh(t => api.update(t, 'sessions', sess.id, { job_id: sess.job_id, employee_id: sess.employee_id, start_time: sess.start_time, end_time: sess.end_time, notes: sess.notes || null }));
-        if (Array.isArray(r) && r[0]) setSessions(p => p.map(s => s.id === sess.id ? r[0] : s));
-        else { toast('Failed to save entry.'); setBusy(false); return; }
-      } else {
-        const u = await withRefresh(t => api.user(t));
-        if (!u?.id) { toast('Failed to save entry.'); setBusy(false); return; }
-        const r = await withRefresh(t => api.insert(t, 'sessions', { ...sess, user_id: u.id }));
-        if (Array.isArray(r) && r[0]) setSessions(p => [...p, r[0]]);
-        else { toast('Failed to save entry.'); setBusy(false); return; }
-      }
-    } catch { toast('Network error. Could not save.'); }
-    setBusy(false);
-    if (onDone) onDone();
-  }
-
-  async function processVoiceEntry(audioBlob, meta = {}) {
-    if (!isOnline()) return { error: { message: 'Voice entries need internet.' } };
-    const result = await withRefresh(t => api.processVoiceEntry(t, audioBlob, {
-      ...meta,
-      jobs: jobs
-        .filter(j => (j.status || 'active') === 'active')
-        .map(j => ({ id: j.id, name: j.name, address: j.address || '', status: j.status || 'active' })),
-      customers: customers.map(c => ({ id: c.id, name: c.name })),
-      now: new Date().toISOString(),
-      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Vancouver',
-      defaultStart: '08:00',
-    }));
-    return result || { error: { message: 'Your session expired. Please sign in again.' } };
-  }
-
-  async function deleteSession(id) {
-    if (offlineDelete('sessions', id, () => setSessions(p => p.filter(s => s.id !== id)))) return;
-    try { await withRefresh(t => api.delete(t, 'sessions', id)); setSessions(p => p.filter(s => s.id !== id)); }
-    catch { toast('Failed to delete entry.'); }
-  }
-
-  async function addJob(job) {
-    if (offlineInsert('jobs', job, () => setJobs(p => [...p, { ...job, id: 'temp-' + Date.now() }]))) return;
-    try {
-      const u = await withRefresh(t => api.user(t));
-      if (!u?.id) { toast('Failed to add job.'); return; }
-      const r = await withRefresh(t => api.insert(t, 'jobs', { ...job, user_id: u.id }));
-      if (Array.isArray(r) && r[0]) setJobs(p => [...p, r[0]]);
-      else toast('Failed to add job.');
-    } catch { toast('Network error. Could not add job.'); }
-  }
-  async function updateJob(job) {
-    const body = { name: job.name, rate: job.rate, color: job.color, notes: job.notes, status: job.status || 'active', address: job.address || null, budget_hours: job.budget_hours || null, budget_cost: job.budget_cost || null, pricing_type: job.pricing_type || 'hourly', half_day_rate: job.half_day_rate || null, full_day_rate: job.full_day_rate || null };
-    if (offlineUpdate('jobs', job.id, body, () => setJobs(p => p.map(j => j.id === job.id ? { ...j, ...body } : j)))) return;
-    try {
-      const r = await withRefresh(t => api.update(t, 'jobs', job.id, body));
-      if (Array.isArray(r) && r[0]) setJobs(p => p.map(j => j.id === job.id ? r[0] : j));
-      else toast('Failed to update job.');
-    } catch { toast('Network error. Could not update job.'); }
-  }
-  async function deleteJob(id) {
-    if (offlineDelete('jobs', id, () => { setJobs(p => p.filter(j => j.id !== id)); setSessions(p => p.filter(s => s.job_id !== id)); })) return;
-    try { await withRefresh(t => api.delete(t, 'jobs', id)); setJobs(p => p.filter(j => j.id !== id)); setSessions(p => p.filter(s => s.job_id !== id)); }
-    catch { toast('Failed to delete job.'); }
-  }
-
-  async function addEmployee(emp) {
-    if (offlineInsert('employees', emp, () => setEmployees(p => [...p, { ...emp, id: 'temp-' + Date.now() }]))) return;
-    try {
-      const u = await withRefresh(t => api.user(t));
-      if (!u?.id) { toast('Failed to add employee.'); return; }
-      const r = await withRefresh(t => api.insert(t, 'employees', { ...emp, user_id: u.id }));
-      if (Array.isArray(r) && r[0]) setEmployees(p => [...p, r[0]]);
-      else toast('Failed to add employee.');
-    } catch { toast('Network error. Could not add employee.'); }
-  }
-  async function updateEmployee(emp) {
-    const body = { name: emp.name, rate: emp.rate };
-    if (offlineUpdate('employees', emp.id, body, () => setEmployees(p => p.map(e => e.id === emp.id ? { ...e, ...body } : e)))) return;
-    try {
-      const r = await withRefresh(t => api.update(t, 'employees', emp.id, body));
-      if (Array.isArray(r) && r[0]) setEmployees(p => p.map(e => e.id === emp.id ? r[0] : e));
-      else toast('Failed to update employee.');
-    } catch { toast('Network error. Could not update employee.'); }
-  }
-  async function deleteEmployee(id) {
-    if (offlineDelete('employees', id, () => setEmployees(p => p.filter(e => e.id !== id)))) return;
-    try { await withRefresh(t => api.delete(t, 'employees', id)); setEmployees(p => p.filter(e => e.id !== id)); }
-    catch { toast('Failed to delete employee.'); }
-  }
-
-  async function addMileage(m) {
-    if (offlineInsert('mileage', m, () => setMileage(p => [...p, { ...m, id: 'temp-' + Date.now() }]))) return;
-    try {
-      const u = await withRefresh(t => api.user(t));
-      if (!u?.id) { toast('Failed to log trip.'); return; }
-      const r = await withRefresh(t => api.insert(t, 'mileage', { ...m, user_id: u.id }));
-      if (Array.isArray(r) && r[0]) setMileage(p => [...p, r[0]]);
-      else toast('Failed to log trip.');
-    } catch { toast('Network error. Could not log trip.'); }
-  }
-  async function deleteMileage(id) {
-    if (offlineDelete('mileage', id, () => setMileage(p => p.filter(m => m.id !== id)))) return;
-    try { await withRefresh(t => api.delete(t, 'mileage', id)); setMileage(p => p.filter(m => m.id !== id)); }
-    catch { toast('Failed to delete trip.'); }
-  }
-
-  async function updateCompany(data) {
-    setCompany(data);
-    localStorage.setItem('sl_company', JSON.stringify(data));
-    if (!isOnline()) {
-      enqueue({ type: 'upsert_company', body: companyToDb(data) });
-      setQueueCount(getQueue().length);
-      return;
-    }
-    try {
-      const u = await withRefresh(t => api.user(t));
-      if (!u?.id) { toast('Could not save company info.'); return; }
-      const r = await withRefresh(t => api.upsert(t, 'company_profiles', { ...companyToDb(data), user_id: u.id }));
-      if (Array.isArray(r) && r[0]) {
-        const mapped = companyFromDb(r[0]);
-        setCompany(mapped);
-        localStorage.setItem('sl_company', JSON.stringify(mapped));
-      }
-    } catch { toast('Network error. Company info saved locally.'); }
-  }
-
-  async function addCustomer(cust) {
-    if (offlineInsert('customers', cust, () => setCustomers(p => [...p, { ...cust, id: 'temp-' + Date.now() }]))) return;
-    try {
-      const u = await withRefresh(t => api.user(t));
-      if (!u?.id) { toast('Failed to add customer.'); return; }
-      const r = await withRefresh(t => api.insert(t, 'customers', { ...cust, user_id: u.id }));
-      if (Array.isArray(r) && r[0]) setCustomers(p => [...p, r[0]]);
-      else toast('Failed to add customer.');
-    } catch { toast('Network error. Could not add customer.'); }
-  }
-  async function updateCustomer(cust) {
-    const body = { name: cust.name, phone: cust.phone, email: cust.email, address: cust.address };
-    if (offlineUpdate('customers', cust.id, body, () => setCustomers(p => p.map(c => c.id === cust.id ? { ...c, ...body } : c)))) return;
-    try {
-      const r = await withRefresh(t => api.update(t, 'customers', cust.id, body));
-      if (Array.isArray(r) && r[0]) setCustomers(p => p.map(c => c.id === cust.id ? r[0] : c));
-      else toast('Failed to update customer.');
-    } catch { toast('Network error. Could not update customer.'); }
-  }
-  async function deleteCustomer(id) {
-    if (offlineDelete('customers', id, () => setCustomers(p => p.filter(c => c.id !== id)))) return;
-    try { await withRefresh(t => api.delete(t, 'customers', id)); setCustomers(p => p.filter(c => c.id !== id)); }
-    catch { toast('Failed to delete customer.'); }
-  }
-
-  async function addExpense(exp) {
-    if (offlineInsert('expenses', exp, () => setExpenses(p => [...p, { ...exp, id: 'temp-' + Date.now() }]))) return;
-    try {
-      const u = await withRefresh(t => api.user(t));
-      if (!u?.id) { toast('Failed to add expense.'); return; }
-      const r = await withRefresh(t => api.insert(t, 'expenses', { ...exp, user_id: u.id }));
-      if (Array.isArray(r) && r[0]) setExpenses(p => [...p, r[0]]);
-      else toast('Failed to add expense.');
-    } catch { toast('Network error. Could not add expense.'); }
-  }
-  async function deleteExpense(id) {
-    if (offlineDelete('expenses', id, () => setExpenses(p => p.filter(e => e.id !== id)))) return;
-    try { await withRefresh(t => api.delete(t, 'expenses', id)); setExpenses(p => p.filter(e => e.id !== id)); }
-    catch { toast('Failed to delete expense.'); }
-  }
-
-  // Records an invoice sent from QuickBooks and marks its time entries as billed.
-  // Returns true on success. Needs a connection so entries can't be double-billed.
-  async function recordInvoice(inv, sessionIds) {
-    if (!isOnline()) { toast('You are offline. Connect to the internet to mark hours as billed.'); return false; }
-    try {
-      const u = await withRefresh(t => api.user(t));
-      if (!u?.id) { toast('Failed to save invoice: not signed in. Please sign in again.'); return false; }
-      const r = await withRefresh(t => api.insert(t, 'invoices', { ...inv, user_id: u.id }));
-      if (!Array.isArray(r) || !r[0]) {
-        console.error('Invoice insert failed:', r);
-        toast('Failed to save invoice' + (r?.message ? ': ' + r.message : '.'));
-        return false;
-      }
-      const saved = r[0];
-      setInvoices(p => [...p, saved]);
-      const ids = sessionIds.filter(id => !String(id).startsWith('temp-'));
-      if (ids.length === 0) return true;
-      const ur = await withRefresh(t => api.updateMany(t, 'sessions', ids, { invoice_id: saved.id }));
-      if (!Array.isArray(ur) || ur.length !== ids.length) {
-        console.error('Marking sessions billed failed:', ur);
-        toast('Invoice saved, but some hours could not be marked as billed' + (ur?.message ? ': ' + ur.message : '.'));
-        if (!Array.isArray(ur)) return false;
-      }
-      const billedIds = new Set((Array.isArray(ur) ? ur : []).map(x => x.id));
-      setSessions(p => p.map(x => billedIds.has(x.id) ? { ...x, invoice_id: saved.id } : x));
-      toast(`Marked ${billedIds.size} entr${billedIds.size === 1 ? 'y' : 'ies'} as billed on ${saved.notes || 'invoice'}.`, 'success');
-      return true;
-    } catch (ex) {
-      console.error('Invoice save error:', ex);
-      toast('Network error. Could not save invoice' + (ex?.message ? ': ' + ex.message : '.'));
-      return false;
-    }
-  }
-  async function updateInvoice(inv) {
-    const body = { status: inv.status };
-    if (offlineUpdate('invoices', inv.id, body, () => setInvoices(p => p.map(x => x.id === inv.id ? { ...x, ...body } : x)))) return;
-    try {
-      const r = await withRefresh(t => api.update(t, 'invoices', inv.id, body));
-      if (Array.isArray(r) && r[0]) setInvoices(p => p.map(x => x.id === inv.id ? r[0] : x));
-      else toast('Failed to update invoice.');
-    } catch { toast('Network error. Could not update invoice.'); }
-  }
-  async function deleteInvoice(id) {
-    // The database releases the invoice's hours (invoice_id is set to null on delete).
-    const release = () => {
-      setInvoices(p => p.filter(x => x.id !== id));
-      setSessions(p => p.map(s => s.invoice_id === id ? { ...s, invoice_id: null } : s));
-    };
-    if (offlineDelete('invoices', id, release)) return;
-    try { await withRefresh(t => api.delete(t, 'invoices', id)); release(); }
-    catch { toast('Failed to delete invoice.'); }
-  }
-
-  async function signOut() {
-    if (token) await api.signOut(token);
-    clearAuth();
-    setAuthData(null);
-    setJobs([]); setSessions([]); setEmployees([]); setMileage([]); setCustomers([]); setExpenses([]); setInvoices([]); setActive(null);
-    setCompany({});
-    localStorage.removeItem('sl_company');
-  }
+  const common = { jobs: view.jobs, employees: view.employees, sessions: view.sessions, company: view.company, isDesktop };
+  const breakState = view.active ? {
+    pausedAt: view.active.break_started_at ? Date.parse(view.active.break_started_at) : null,
+    totalBreakMs: (Number(view.active.break_seconds) || 0) * 1000,
+  } : { pausedAt: null, totalBreakMs: 0 };
+  const a = ledger.actions;
+  const goTo = id => { setTab(id); setShowMore(false); };
 
   const tabContent = (
+    <Suspense fallback={<Centered>Loading…</Centered>}>
+      {tab === 'home' && <DashboardTab {...common} invoices={view.invoices} active={view.active} breakState={breakState} otRules={prefs.otRules} onGoTo={goTo} />}
+      {tab === 'clock' && <ClockTab {...common} active={view.active} openSessions={view.openSessions} breakState={breakState} otRules={prefs.otRules}
+        onIn={(j, e) => run(a.clockIn(j, e))} onOut={(endTime, dayType) => run(a.clockOut({ endTime, dayType }))}
+        onPause={() => run(a.startBreak())} onResume={() => run(a.endBreak())}
+        onSave={s => run(a.saveSession(s))} onDelete={id => run(a.deleteSession(id))}
+        onVoiceInvoice={setVoiceInvoiceRequest} online={online}
+        onVoiceProcess={(blob, meta, signal) => processVoiceEntry(user.uid, blob, { ...meta, jobs: view.jobs.filter(j => (j.status || 'active') === 'active'), customers: view.customers }, signal)} />}
+      {tab === 'calendar' && <CalendarTab {...common} invoices={view.invoices} otRules={prefs.otRules} onSave={s => run(a.saveSession(s))} onDelete={id => run(a.deleteSession(id))} />}
+      {tab === 'mileage' && <MileageTab jobs={view.jobs} mileage={view.mileage} onAdd={m => run(a.addMileage(m))} onDelete={id => run(a.deleteMileage(id))} isDesktop={isDesktop} />}
+      {tab === 'expenses' && <ExpensesTab jobs={view.jobs} expenses={view.expenses} onAdd={e => run(a.addExpense(e))} onDelete={id => run(a.deleteExpense(id))} isDesktop={isDesktop} />}
+      {tab === 'reports' && <ReportsTab {...common} openSessions={view.openSessions} mileage={view.mileage} expenses={view.expenses} customers={view.customers} invoices={view.invoices} taxRate={prefs.taxRate} otRules={prefs.otRules} ledger={ledger} toast={toast} />}
+      {tab === 'jobs' && <JobsTab {...common} onAdd={j => run(a.addJob(j))} onUpdate={j => run(a.updateJob(j))} onDelete={id => run(a.deleteJob(id))} />}
+      {tab === 'company' && <CompanyTab {...common} customers={view.customers} invoices={view.invoices} invoiceLines={view.invoiceLines}
+        onAddEmp={e => run(a.addEmployee(e))} onUpdateEmp={e => run(a.updateEmployee(e))} onDeleteEmp={id => run(a.deleteEmployee(id))}
+        onAddCust={c => run(a.addCustomer(c))} onUpdateCust={c => run(a.updateCustomer(c))} onDeleteCust={id => run(a.deleteCustomer(id))}
+        onSetInvoiceStatus={(id, st) => run(ledger.setInvoiceStatus(id, st))} onDeleteInvoice={id => run(ledger.deleteInvoice(id), 'Invoice deleted; its hours are unbilled again.')}
+        onUpdateCompany={d => run(a.saveCompany(d), 'Company info saved on this device.')} taxRate={prefs.taxRate} />}
+    </Suspense>
+  );
+
+  const body = !ledger.ready ? <Centered>Opening your data on this device…</Centered>
+    : ledger.storageError ? (
+      <Centered>
+        <div role="alert" style={{ color: '#a93226', fontWeight: 600, marginBottom: 8 }}>Offline storage is unavailable</div>
+        <div style={{ marginBottom: 16 }}>{ledger.storageError} Changes cannot be saved on this device until this is fixed (e.g. leave private browsing, free up storage).</div>
+        <button type="button" onClick={() => window.location.reload()} style={{ padding: '12px 24px', borderRadius: 10, border: 'none', background: prefs.accentColor, color: '#fff', fontWeight: 700 }}>Reload</button>
+      </Centered>
+    ) : tabContent;
+
+  const banner = (
     <>
-      {tab === 'home' && <DashboardTab jobs={jobs} employees={employees} sessions={sessions} company={company} invoices={invoices} active={active} breakState={breakState} onGoTo={id => { setTab(id); setShowMore(false); }} isDesktop={isDesktop} />}
-      {tab === 'clock' && <ClockTab jobs={jobs} employees={employees} sessions={sessions} company={company} active={active} onIn={clockIn} onOut={clockOut} onPause={pauseTimer} onResume={resumeTimer} breakState={breakState} onSave={saveSession} onDelete={deleteSession} onVoiceProcess={processVoiceEntry} onVoiceInvoice={setVoiceInvoiceRequest} online={online} busy={busy} isDesktop={isDesktop} />}
-      {tab === 'calendar' && <CalendarTab jobs={jobs} employees={employees} sessions={sessions} company={company} invoices={invoices} onSave={saveSession} onDelete={deleteSession} busy={busy} isDesktop={isDesktop} />}
-      {tab === 'mileage' && <MileageTab jobs={jobs} mileage={mileage} onAdd={addMileage} onDelete={deleteMileage} busy={busy} isDesktop={isDesktop} />}
-      {tab === 'expenses' && <ExpensesTab jobs={jobs} expenses={expenses} onAdd={addExpense} onDelete={deleteExpense} isDesktop={isDesktop} />}
-      {tab === 'reports' && <ReportsTab jobs={jobs} employees={employees} sessions={sessions} mileage={mileage} expenses={expenses} company={company} customers={customers} taxRate={taxRate} isDesktop={isDesktop} onRecordInvoice={recordInvoice} />}
-      {tab === 'jobs' && <JobsTab jobs={jobs} sessions={sessions} company={company} onAdd={addJob} onUpdate={updateJob} onDelete={deleteJob} isDesktop={isDesktop} />}
-      {tab === 'company' && <CompanyTab employees={employees} onAddEmp={addEmployee} onUpdateEmp={updateEmployee} onDeleteEmp={deleteEmployee} customers={customers} onAddCust={addCustomer} onUpdateCust={updateCustomer} onDeleteCust={deleteCustomer} invoices={invoices} sessions={sessions} onUpdateInvoice={updateInvoice} onDeleteInvoice={deleteInvoice} company={company} onUpdateCompany={updateCompany} isDesktop={isDesktop} />}
+      <UpdateBanner />
+      <SyncStatus authStatus={auth.status} sync={ledger.sync} pendingCount={ledger.pendingCount} problemCount={ledger.problemOps.length} online={online} onOpen={() => setShowPending(true)} />
+      {ledger.legacy && <LegacyReview legacy={ledger.legacy} uid={user.uid} ledger={ledger} toast={toast} />}
     </>
   );
 
-  const loadingState = (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '80px 0', color: '#aaa', fontSize: 14 }}>Loading your data...</div>
+  const overlays = (
+    <>
+      {showSettings && <SettingsModal prefs={prefs} onClose={() => setShowSettings(false)} />}
+      {showPending && <PendingChangesModal ops={ledger.ops} view={view} syncState={ledger.sync.state} onClose={() => setShowPending(false)}
+        onRetry={id => ledger.retryOp(id)} onDiscard={id => ledger.discardOp(id)} onResolve={(id, c) => ledger.resolveConflict(id, c)} onSyncNow={() => ledger.syncNow()} />}
+      {confirm && <ConfirmDialog {...confirm} onClose={() => setConfirm(null)} />}
+      {voiceInvoiceRequest && (
+        <Suspense fallback={null}>
+          <InvoiceModal {...common} customers={view.customers} openSessions={view.openSessions} taxRate={prefs.taxRate} voiceRequest={voiceInvoiceRequest}
+            ledger={ledger} toast={toast} onClose={() => setVoiceInvoiceRequest(null)} />
+        </Suspense>
+      )}
+    </>
   );
 
-  const errorState = (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '80px 24px', textAlign: 'center' }}>
-      <div style={{ color: '#c0392b', fontSize: 16, fontWeight: 600, marginBottom: 8 }}>Something went wrong</div>
-      <div style={{ color: '#999', fontSize: 14, marginBottom: 20 }}>Could not load your data. This could be a network issue or the server may be temporarily unavailable.</div>
-      <button onClick={loadData} style={{ padding: '12px 28px', borderRadius: 10, border: 'none', background: accentColor, color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>Try Again</button>
+  const toastsEl = (
+    <div aria-live="assertive" style={isDesktop ? { position: 'fixed', top: 16, right: 16, zIndex: 2000, display: 'flex', flexDirection: 'column', gap: 8 } : undefined}>
+      {toasts.map(t => <Toast key={t.id} message={t.message} type={t.type} onDone={() => removeToast(t.id)} />)}
     </div>
   );
 
-  const settingsModal = showSettings ? (
-    <SettingsModal
-      accentColor={accentColor}
-      onAccentChange={setAccentColor}
-      taxRate={taxRate}
-      onTaxChange={setTaxRate}
-      reminderTime={reminderTime}
-      onReminderChange={setReminderTime}
-      onClose={() => setShowSettings(false)}
-    />
-  ) : null;
+  const clockedIn = view.active && <div style={{ fontSize: 11, color: prefs.accentColor, fontFamily: "'DM Mono', monospace", letterSpacing: 1, marginTop: 4 }}>● CLOCKED IN</div>;
 
-  const voiceInvoiceModal = voiceInvoiceRequest ? (
-    <InvoiceModal
-      sessions={sessions}
-      jobs={jobs}
-      employees={employees}
-      customers={customers}
-      dateRange={[
-        voiceInvoiceRequest.date_range_start ? new Date(voiceInvoiceRequest.date_range_start) : new Date(Date.now() - 14 * 86400000),
-        voiceInvoiceRequest.date_range_end ? new Date(voiceInvoiceRequest.date_range_end) : new Date(),
-      ]}
-      company={company}
-      taxRate={taxRate}
-      voiceRequest={voiceInvoiceRequest}
-      onRecordInvoice={recordInvoice}
-      onClose={() => setVoiceInvoiceRequest(null)}
-    />
-  ) : null;
-
-  if (!authData) return (
-    <AccentColorContext.Provider value={accentColor}>
-      <AuthScreen onAuth={d => { saveAuth(d); setAuthData(d); }} />
-    </AccentColorContext.Provider>
-  );
-
-  // --- Desktop layout ---
   if (isDesktop) {
     return (
-      <AccentColorContext.Provider value={accentColor}>
-      <div style={{ display: 'flex', height: '100vh', background: '#f4f4f4', fontFamily: "'DM Sans', sans-serif" }}>
-        {/* Toasts — fixed top-right */}
-        <div style={{ position: 'fixed', top: 16, right: 16, zIndex: 1000, display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {toasts.map(t => <Toast key={t.id} message={t.message} type={t.type} onDone={() => removeToast(t.id)} />)}
-        </div>
-
-        {/* Sidebar */}
-        <div style={{ width: 220, minWidth: 220, height: '100vh', background: '#fff', borderRight: '1px solid #e8e8e8', display: 'flex', flexDirection: 'column', position: 'sticky', top: 0, flexShrink: 0 }}>
-          <div style={{ padding: '24px 20px 20px', borderBottom: '1px solid #f0f0f0' }}>
-            <div style={{ fontSize: 22, fontWeight: 800, fontFamily: "'Syne', sans-serif", color: '#111', letterSpacing: -0.5 }}>
-              Site<span style={{ color: accentColor }}>Ledger</span>
+      <AccentColorContext.Provider value={prefs.accentColor}>
+        <div style={{ display: 'flex', height: '100vh', background: '#f4f4f4', fontFamily: "'DM Sans', sans-serif" }}>
+          {toastsEl}
+          <nav aria-label="Main" style={{ width: 220, minWidth: 220, height: '100vh', background: '#fff', borderRight: '1px solid #e8e8e8', display: 'flex', flexDirection: 'column', position: 'sticky', top: 0, flexShrink: 0 }}>
+            <div style={{ padding: '24px 20px 20px', borderBottom: '1px solid #f0f0f0' }}>
+              <div style={{ fontSize: 22, fontWeight: 800, fontFamily: "'Syne', sans-serif", color: '#111', letterSpacing: -0.5 }}>Site<span style={{ color: prefs.accentColor }}>Ledger</span></div>
+              {clockedIn}
+              <div style={{ fontSize: 11, color: '#888', marginTop: 6, overflow: 'hidden', textOverflow: 'ellipsis' }}>{auth.user?.email}</div>
             </div>
-            {active && <div style={{ fontSize: 11, color: accentColor, fontFamily: "'DM Mono', monospace", letterSpacing: 1, marginTop: 4 }}>● CLOCKED IN</div>}
-          </div>
-          <div style={{ flex: 1, padding: '12px 12px 0', display: 'flex', flexDirection: 'column', gap: 2, overflowY: 'auto' }}>
-            {TABS.map(t => (
-              <button key={t.id} onClick={() => setTab(t.id)}
-                style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 12px', borderRadius: 10, border: 'none', background: tab === t.id ? `${accentColor}18` : 'transparent', color: tab === t.id ? accentColor : '#555', fontSize: 14, fontWeight: tab === t.id ? 700 : 400, cursor: 'pointer', textAlign: 'left', width: '100%', fontFamily: "'DM Sans', sans-serif" }}>
-                <Icon name={t.i} size={17} />
-                {t.l}
+            <div style={{ flex: 1, padding: '12px 12px 0', display: 'flex', flexDirection: 'column', gap: 2, overflowY: 'auto' }}>
+              {TABS.map(t => (
+                <button key={t.id} type="button" onClick={() => setTab(t.id)} aria-current={tab === t.id ? 'page' : undefined}
+                  style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 12px', borderRadius: 10, border: 'none', background: tab === t.id ? `${prefs.accentColor}18` : 'transparent', color: tab === t.id ? prefs.accentColor : '#444', fontSize: 14, fontWeight: tab === t.id ? 700 : 400, cursor: 'pointer', textAlign: 'left', width: '100%' }}>
+                  <Icon name={t.i} size={17} />{t.l}
+                </button>
+              ))}
+            </div>
+            <div style={{ padding: '16px 12px', borderTop: '1px solid #f0f0f0', display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <button type="button" onClick={() => setShowSettings(true)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10, border: 'none', background: 'transparent', color: '#555', fontSize: 13, cursor: 'pointer', width: '100%', textAlign: 'left' }}>
+                <Icon name="cog" size={16} /> Settings
               </button>
-            ))}
-          </div>
-          <div style={{ padding: '16px 12px', borderTop: '1px solid #f0f0f0', display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <button onClick={() => setShowSettings(true)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10, border: 'none', background: 'transparent', color: '#666', fontSize: 13, cursor: 'pointer', width: '100%', fontFamily: "'DM Sans', sans-serif", textAlign: 'left' }}>
-              <Icon name="cog" size={16} /> Settings
-            </button>
-            <button onClick={signOut} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10, border: 'none', background: 'transparent', color: '#aaa', fontSize: 13, cursor: 'pointer', width: '100%', fontFamily: "'DM Sans', sans-serif" }}>
-              <Icon name="logout" size={16} /> Sign Out
-            </button>
-          </div>
+              <button type="button" onClick={requestSignOut} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10, border: 'none', background: 'transparent', color: '#666', fontSize: 13, cursor: 'pointer', width: '100%' }}>
+                <Icon name="logout" size={16} /> Sign Out
+              </button>
+            </div>
+          </nav>
+          <main style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+            {banner}
+            <div style={{ maxWidth: 900, width: '100%', alignSelf: 'center', flex: 1 }}>{body}</div>
+          </main>
+          {overlays}
         </div>
-
-        {/* Content area */}
-        <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
-          <OfflineBanner online={online} syncing={syncing} queueCount={queueCount} />
-          <div style={{ maxWidth: 900, width: '100%', alignSelf: 'center', flex: 1 }}>
-            {loading ? loadingState : loadError ? errorState : tabContent}
-          </div>
-        </div>
-        {settingsModal}
-        {voiceInvoiceModal}
-      </div>
       </AccentColorContext.Provider>
     );
   }
 
-  // --- Mobile layout ---
   return (
-    <AccentColorContext.Provider value={accentColor}>
-    <div style={{ maxWidth: 430, margin: '0 auto', minHeight: '100vh', background: '#f4f4f4', fontFamily: "'DM Sans', sans-serif", position: 'relative' }}>
-      {toasts.map(t => (
-        <Toast key={t.id} message={t.message} type={t.type} onDone={() => removeToast(t.id)} />
-      ))}
-
-      <OfflineBanner online={online} syncing={syncing} queueCount={queueCount} />
-
-      <div style={{ padding: '20px 20px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #e8e8e8', background: '#fff' }}>
-        <div>
-          <div style={{ fontSize: 20, fontWeight: 800, fontFamily: "'Syne', sans-serif", color: '#111', letterSpacing: -0.5 }}>
-            Site<span style={{ color: accentColor }}>Ledger</span>
+    <AccentColorContext.Provider value={prefs.accentColor}>
+      <div style={{ maxWidth: 430, margin: '0 auto', minHeight: '100vh', background: '#f4f4f4', fontFamily: "'DM Sans', sans-serif", position: 'relative' }}>
+        {toastsEl}
+        {banner}
+        <header style={{ padding: '20px 20px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #e8e8e8', background: '#fff' }}>
+          <div>
+            <div style={{ fontSize: 20, fontWeight: 800, fontFamily: "'Syne', sans-serif", color: '#111', letterSpacing: -0.5 }}>Site<span style={{ color: prefs.accentColor }}>Ledger</span></div>
+            {clockedIn}
           </div>
-          {active && <div style={{ fontSize: 11, color: accentColor, fontFamily: "'DM Mono', monospace", letterSpacing: 1 }}>● CLOCKED IN</div>}
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          <button onClick={() => setShowSettings(true)} style={{ ...ib, color: '#aaa' }} aria-label="Settings"><Icon name="cog" size={18} /></button>
-          <button onClick={signOut} style={{ ...ib, color: '#aaa' }} aria-label="Sign out"><Icon name="logout" size={18} /></button>
-        </div>
-      </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <button type="button" onClick={() => setShowSettings(true)} style={{ ...ib, color: '#777', padding: 10 }} aria-label="Settings"><Icon name="cog" size={18} /></button>
+            <button type="button" onClick={requestSignOut} style={{ ...ib, color: '#777', padding: 10 }} aria-label="Sign out"><Icon name="logout" size={18} /></button>
+          </div>
+        </header>
+        <main>{body}</main>
 
-      {loading ? loadingState : loadError ? errorState : tabContent}
-
-      {/* More sheet backdrop */}
-      {showMore && <div onClick={() => setShowMore(false)} style={{ position: 'fixed', inset: 0, zIndex: 99 }} />}
-
-      {/* More sheet */}
-      {showMore && (
-        <div style={{ position: 'fixed', bottom: 56, left: '50%', transform: 'translateX(-50%)', width: '100%', maxWidth: 430, background: '#fff', borderTop: '1px solid #e8e8e8', boxShadow: '0 -6px 24px rgba(0,0,0,0.10)', zIndex: 100, borderRadius: '16px 16px 0 0', paddingBottom: 4 }}>
-          <div style={{ width: 36, height: 4, borderRadius: 2, background: '#e0e0e0', margin: '10px auto 8px' }} />
-          {NAV_MORE.map(id => {
+        {showMore && <div onClick={() => setShowMore(false)} style={{ position: 'fixed', inset: 0, zIndex: 99 }} />}
+        {showMore && (
+          <div id="more-menu" style={{ position: 'fixed', bottom: 56, left: '50%', transform: 'translateX(-50%)', width: '100%', maxWidth: 430, background: '#fff', borderTop: '1px solid #e8e8e8', boxShadow: '0 -6px 24px rgba(0,0,0,0.10)', zIndex: 100, borderRadius: '16px 16px 0 0', paddingBottom: 4 }}>
+            <div style={{ width: 36, height: 4, borderRadius: 2, background: '#e0e0e0', margin: '10px auto 8px' }} />
+            {NAV_MORE.map(id => {
+              const t = TABS.find(x => x.id === id);
+              return (
+                <button key={id} type="button" onClick={() => goTo(id)} aria-current={tab === id ? 'page' : undefined}
+                  style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 24px', width: '100%', background: 'transparent', border: 'none', cursor: 'pointer', color: tab === id ? prefs.accentColor : '#333', fontSize: 15, fontWeight: tab === id ? 700 : 400 }}>
+                  <Icon name={t.i} size={18} />{t.l}
+                </button>
+              );
+            })}
+          </div>
+        )}
+        <nav aria-label="Main" style={{ position: 'fixed', bottom: 0, left: '50%', transform: 'translateX(-50%)', width: '100%', maxWidth: 430, background: '#fff', borderTop: '1px solid #e8e8e8', display: 'flex', padding: '8px 0 calc(12px + env(safe-area-inset-bottom))', zIndex: 98 }}>
+          {NAV_PRIMARY.map(id => {
             const t = TABS.find(x => x.id === id);
             return (
-              <button key={id} onClick={() => { setTab(id); setShowMore(false); }}
-                style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 24px', width: '100%', background: 'transparent', border: 'none', cursor: 'pointer', color: tab === id ? accentColor : '#333', fontSize: 15, fontWeight: tab === id ? 700 : 400, fontFamily: "'DM Sans', sans-serif" }}>
-                <Icon name={t.i} size={18} />
-                {t.l}
-                {tab === id && <div style={{ width: 6, height: 6, borderRadius: '50%', background: accentColor, marginLeft: 'auto' }} />}
+              <button key={id} type="button" onClick={() => goTo(id)} aria-current={tab === id ? 'page' : undefined}
+                style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, background: 'transparent', border: 'none', cursor: 'pointer', padding: '6px 0', color: tab === id ? prefs.accentColor : '#767676' }}>
+                <Icon name={t.i} size={19} />
+                <span style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", letterSpacing: 0.5 }}>{t.l}</span>
               </button>
             );
           })}
-        </div>
-      )}
-
-      {/* Bottom nav */}
-      <div style={{ position: 'fixed', bottom: 0, left: '50%', transform: 'translateX(-50%)', width: '100%', maxWidth: 430, background: '#fff', borderTop: '1px solid #e8e8e8', display: 'flex', padding: '8px 0 12px', zIndex: 98 }}>
-        {NAV_PRIMARY.map(id => {
-          const t = TABS.find(x => x.id === id);
-          return (
-            <button key={id} onClick={() => { setTab(id); setShowMore(false); }}
-              style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, background: 'transparent', border: 'none', cursor: 'pointer', padding: '6px 0', color: tab === id ? accentColor : '#aaa' }}>
-              <Icon name={t.i} size={19} />
-              <span style={{ fontSize: 9, fontFamily: "'DM Mono', monospace", letterSpacing: 0.5 }}>{t.l}</span>
-            </button>
-          );
-        })}
-        <button onClick={() => setShowMore(s => !s)}
-          style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, background: 'transparent', border: 'none', cursor: 'pointer', padding: '6px 0', color: (showMore || NAV_MORE.includes(tab)) ? accentColor : '#aaa' }}>
-          <Icon name="dots" size={19} />
-          <span style={{ fontSize: 9, fontFamily: "'DM Mono', monospace", letterSpacing: 0.5 }}>More</span>
-        </button>
+          <button type="button" onClick={() => setShowMore(s => !s)} aria-expanded={showMore} aria-controls="more-menu"
+            style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, background: 'transparent', border: 'none', cursor: 'pointer', padding: '6px 0', color: (showMore || NAV_MORE.includes(tab)) ? prefs.accentColor : '#767676' }}>
+            <Icon name="dots" size={19} />
+            <span style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", letterSpacing: 0.5 }}>More</span>
+          </button>
+        </nav>
+        {overlays}
       </div>
-      {settingsModal}
-      {voiceInvoiceModal}
-    </div>
     </AccentColorContext.Provider>
   );
 }

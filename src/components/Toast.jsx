@@ -1,17 +1,20 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 export default function Toast({ message, type, onDone }) {
   const [visible, setVisible] = useState(true);
+  const done = useRef(onDone);
+  done.current = onDone;
 
   useEffect(() => {
-    const t = setTimeout(() => { setVisible(false); setTimeout(onDone, 300); }, 4000);
+    // Errors stay longer so they can be read.
+    const t = setTimeout(() => { setVisible(false); setTimeout(() => done.current(), 300); }, type === 'error' ? 7000 : 4000);
     return () => clearTimeout(t);
-  }, []);
+  }, [type]);
 
-  const bg = type === 'error' ? '#c0392b' : type === 'success' ? '#27ae60' : '#E8651A';
+  const bg = type === 'error' ? '#a93226' : type === 'success' ? '#1e7a46' : '#9a4a10';
 
   return (
-    <div style={{
+    <div role={type === 'error' ? 'alert' : 'status'} onClick={() => setVisible(false)} style={{
       position: 'fixed', top: 16, left: '50%', transform: 'translateX(-50%)',
       maxWidth: 400, width: 'calc(100% - 32px)', zIndex: 2000,
       background: bg, color: '#fff', padding: '14px 20px', borderRadius: 12,

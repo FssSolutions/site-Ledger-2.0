@@ -3,10 +3,12 @@ import SessionModal from '../components/SessionModal.jsx';
 import Icon from '../components/Icon.jsx';
 import { card, ib } from '../styles.js';
 import { MN } from '../lib/constants.js';
-import { fmtDur, fmtCAD, calcEarnings, calcEffectiveRate, calcDur, dayKey, calcOvertime } from '../lib/utils.js';
+import { fmtDur, calcDur, dayKey } from '../lib/utils.js';
+import { fmtCAD, sessionBilling, sessionLabourCents, summarize } from '../lib/billing.js';
+import { computeOvertime } from '../lib/overtime.js';
 import { useAccentColor } from '../lib/AccentColorContext.js';
 
-export default function CalendarTab({ jobs, employees, sessions, company, invoices = [], onSave, onDelete, busy, isDesktop }) {
+export default function CalendarTab({ jobs, employees, sessions, company, invoices = [], otRules, onSave, onDelete, isDesktop }) {
   const accent = useAccentColor();
   const [vd, setVd] = useState(new Date());
   const [sel, setSel] = useState(null);
@@ -26,14 +28,24 @@ export default function CalendarTab({ jobs, employees, sessions, company, invoic
 
   function dk(d) { return `${yr}-${String(mo + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`; }
 
-  const ot = useMemo(() => calcOvertime(sessions), [sessions]);
+  // Daily overtime flags per worker; a day is flagged if any one worker is over.
+  const otByDay = useMemo(() => {
+    if (!otRules?.enabled) return {};
+    const out = {};
+    for (const bw of Object.values(computeOvertime(sessions, otRules))) {
+      for (const [day, d] of Object.entries(bw.days)) {
+        const over = d.ot + d.double;
+        if (over > 0) out[day] = Math.max(out[day] || 0, over);
+      }
+    }
+    return out;
+  }, [sessions, otRules]);
+  const data = { jobs, employees, company };
 
   const ss = sel ? (byDay[dk(sel)] || []) : [];
-  const selEarn = ss.reduce((s, x) => s + calcEarnings(x, jobs, employees, company), 0);
-  const selBilled = ss.reduce((s, x) => s + calcEarnings(x, jobs, [], company), 0);
-  const selProfit = selBilled - selEarn;
+  const selSum = summarize(ss, data);
   const selMs = ss.reduce((s, x) => s + calcDur(x), 0);
-  const selOT = sel ? ot.daily[dk(sel)] : null;
+  const selOT = sel ? otByDay[dk(sel)] || 0 : 0;
   const modalDate = sel ? new Date(yr, mo, sel) : new Date();
 
   return (
@@ -49,14 +61,14 @@ export default function CalendarTab({ jobs, employees, sessions, company, invoic
           session={modal === 'add' ? null : modal}
           date={modal === 'add' ? modalDate : null}
           jobs={jobs} employees={employees} company={company}
-          onSave={s => { onSave(s, () => setModal(null)); }}
-          onClose={() => setModal(null)} busy={busy} />
+          onSave={onSave} onSaved={() => setModal(null)}
+          onClose={() => setModal(null)} />
       )}
 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px 8px' }}>
-        <button onClick={() => { setVd(new Date(yr, mo - 1)); setSel(null); }} style={{ ...ib, color: '#888' }}><Icon name="cl" size={16} /></button>
+        <button type="button" aria-label="Previous month" onClick={() => { setVd(new Date(yr, mo - 1)); setSel(null); }} style={{ ...ib, color: '#666', padding: 10 }}><Icon name="cl" size={16} /></button>
         <div style={{ fontSize: 18, fontWeight: 700, fontFamily: "'Syne', sans-serif", color: '#111' }}>{MN[mo]} {yr}</div>
-        <button onClick={() => { setVd(new Date(yr, mo + 1)); setSel(null); }} style={{ ...ib, color: '#888' }}><Icon name="cr" size={16} /></button>
+        <button type="button" aria-label="Next month" onClick={() => { setVd(new Date(yr, mo + 1)); setSel(null); }} style={{ ...ib, color: '#666', padding: 10 }}><Icon name="cr" size={16} /></button>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', padding: '0 16px', gap: 2, marginBottom: 4 }}>
@@ -72,11 +84,11 @@ export default function CalendarTab({ jobs, employees, sessions, company, invoic
           const isTd = new Date().getDate() === d && new Date().getMonth() === mo && new Date().getFullYear() === yr;
           const isSel = sel === d;
           const cols = [...new Set(ds.map(s => jobs.find(j => j.id === s.job_id)?.color).filter(Boolean))];
-          const dayOT = ot.daily[k];
-          const hasOT = dayOT && dayOT.overtime > 0;
+          const hasOT = (otByDay[k] || 0) > 0;
           const hasUnbilled = ds.some(s => s.end_time && !s.invoice_id);
           return (
-            <button key={d} onClick={() => setSel(isSel ? null : d)}
+            <button key={d} type="button" onClick={() => setSel(isSel ? null : d)} aria-pressed={isSel}
+              aria-label={`${MN[mo]} ${d}${ds.length ? `, ${ds.length} entr${ds.length === 1 ? 'y' : 'ies'}` : ''}${hasUnbilled ? ', not yet billed' : ''}${hasOT ? ', overtime' : ''}`}
               onMouseEnter={ds.length > 0 ? e => {
                 const jobNames = [...new Set(ds.map(s => jobs.find(j => j.id === s.job_id)?.name).filter(Boolean))];
                 const ms = ds.reduce((s, x) => s + calcDur(x), 0);
@@ -114,15 +126,15 @@ export default function CalendarTab({ jobs, employees, sessions, company, invoic
               <div style={{ color: '#111', fontSize: 16, fontWeight: 700, fontFamily: "'Syne', sans-serif" }}>{MN[mo]} {sel}</div>
               {ss.length > 0 && (
                 <div style={{ color: '#999', fontSize: 12, marginTop: 2, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                  {fmtDur(selMs)} · {fmtCAD(selEarn)}
-                  {selProfit > 0 && (
-                    <span style={{ background: '#eafaf1', color: '#1e8449', fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 4, fontFamily: "'DM Mono', monospace" }}>
-                      +{fmtCAD(selProfit)} profit
+                  {fmtDur(selMs)} · {fmtCAD(selSum.revenueCents)} billable
+                  {selSum.labourCents > 0 && (
+                    <span title="Billable minus employee wages for this day" style={{ background: '#eafaf1', color: '#1e6b3a', fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 4, fontFamily: "'DM Mono', monospace" }}>
+                      {fmtCAD(selSum.revenueCents - selSum.labourCents)} after wages
                     </span>
                   )}
-                  {selOT && selOT.overtime > 0 && (
-                    <span style={{ background: selOT.overtime > 4 ? '#FADBD8' : '#FDEBD0', color: selOT.overtime > 4 ? '#C0392B' : '#E67E22', fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 4, fontFamily: "'DM Mono', monospace" }}>
-                      {selOT.overtime.toFixed(1)}h OT
+                  {selOT > 0 && (
+                    <span title="Daily overtime flag for at least one worker (BC rules)" style={{ background: selOT > 4 ? '#FADBD8' : '#FDEBD0', color: selOT > 4 ? '#A93226' : '#A35A10', fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 4, fontFamily: "'DM Mono', monospace" }}>
+                      {selOT.toFixed(1)}h OT
                     </span>
                   )}
                 </div>
@@ -158,24 +170,17 @@ export default function CalendarTab({ jobs, employees, sessions, company, invoic
                 </div>
                 <div style={{ textAlign: 'right', marginRight: 4 }}>
                   {(() => {
-                    const cost = calcEarnings(s, jobs, employees, company);
-                    const billed = emp ? calcEarnings(s, jobs, [], company) : cost;
-                    const profit = billed - cost;
+                    const bill = sessionBilling(s, data);
+                    const labour = sessionLabourCents(s, data);
                     return <>
-                      <div style={{ color: '#111', fontSize: 13, fontWeight: 600 }}>{fmtCAD(cost)}</div>
-                      {emp && profit !== 0 && (
-                        <div style={{ color: profit >= 0 ? '#1e8449' : '#C0392B', fontSize: 11, fontWeight: 600 }}>
-                          {profit >= 0 ? '+' : ''}{fmtCAD(profit)}
-                        </div>
-                      )}
-                      {j?.pricing_type === 'fixed' && s.end_time && (
-                        <div style={{ color: '#aaa', fontSize: 11 }}>≈ {fmtCAD(calcEffectiveRate(s, jobs, employees, company))}/hr</div>
-                      )}
+                      <div style={{ color: '#111', fontSize: 13, fontWeight: 600 }}>{fmtCAD(bill.amountCents)}</div>
+                      {emp && <div style={{ color: '#666', fontSize: 11 }}>wage {fmtCAD(labour)}</div>}
+                      {bill.missing === 'day_type' && <div style={{ color: '#a93226', fontSize: 11 }}>pick day type</div>}
                     </>;
                   })()}
                 </div>
-                <button onClick={() => setModal(s)} style={ib}><Icon name="edit" size={14} /></button>
-                <button onClick={() => { if (confirm(s.invoice_id ? 'This entry has already been billed. Deleting it won\'t change the QuickBooks invoice. Delete anyway?' : 'Delete this entry?')) onDelete(s.id); }} style={{ ...ib, color: '#e74c3c' }}><Icon name="trash" size={14} /></button>
+                <button type="button" aria-label="Edit entry" onClick={() => setModal(s)} style={{ ...ib, padding: 8 }}><Icon name="edit" size={14} /></button>
+                <button type="button" aria-label="Delete entry" onClick={() => { if (window.confirm(s.invoice_id ? 'This entry is already billed. Deleting it won\'t change the recorded or QuickBooks invoice. Delete anyway?' : 'Delete this entry?')) onDelete(s.id); }} style={{ ...ib, color: '#c0392b', padding: 8 }}><Icon name="trash" size={14} /></button>
               </div>
             );
           })}

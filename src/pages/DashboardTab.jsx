@@ -1,12 +1,14 @@
 import { useState, useEffect, useMemo } from 'react';
 import Icon from '../components/Icon.jsx';
 import { card } from '../styles.js';
-import { fmtDur, fmtCAD, calcEarnings, calcDur, dayKey } from '../lib/utils.js';
+import { fmtDur, calcDur, dayKey } from '../lib/utils.js';
+import { fmtCAD, sessionBilling, summarize } from '../lib/billing.js';
+import { weekStartKey } from '../lib/time.js';
 import { useAccentColor } from '../lib/AccentColorContext.js';
 
-export default function DashboardTab({ jobs, employees, sessions, company, invoices, active, breakState, onGoTo, isDesktop }) {
+export default function DashboardTab({ jobs, employees, sessions, company, active, breakState, onGoTo, isDesktop }) {
   const accent = useAccentColor();
-  const [tick, setTick] = useState(0);
+  const [, setTick] = useState(0);
 
   useEffect(() => {
     if (!active) return;
@@ -16,19 +18,18 @@ export default function DashboardTab({ jobs, employees, sessions, company, invoi
 
   const now = new Date();
   const todayKey = dayKey(now);
-  const weekStartMs = (() => {
-    const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - d.getDay()); return d.getTime();
-  })();
-  const monthStartMs = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+  const data = { jobs, employees, company };
+  const weekStart = weekStartKey(todayKey, 0);
+  const monthStart = `${todayKey.slice(0, 7)}-01`;
 
   const todaySessions = useMemo(() => sessions.filter(s => dayKey(s.start_time) === todayKey), [sessions, todayKey]);
-  const weekSessions = useMemo(() => sessions.filter(s => new Date(s.start_time).getTime() >= weekStartMs), [sessions, weekStartMs]);
-  const monthSessions = useMemo(() => sessions.filter(s => new Date(s.start_time).getTime() >= monthStartMs), [sessions, monthStartMs]);
+  const weekSessions = useMemo(() => sessions.filter(s => { const k = dayKey(s.start_time); return k >= weekStart && k <= todayKey; }), [sessions, weekStart, todayKey]);
+  const monthSessions = useMemo(() => sessions.filter(s => { const k = dayKey(s.start_time); return k >= monthStart && k <= todayKey; }), [sessions, monthStart, todayKey]);
 
   const todayMs = todaySessions.reduce((a, s) => a + calcDur(s), 0);
-  const todayEarn = todaySessions.reduce((a, s) => a + calcEarnings(s, jobs, employees, company), 0);
+  const todayEarn = summarize(todaySessions, data).revenueCents;
   const weekMs = weekSessions.reduce((a, s) => a + calcDur(s), 0);
-  const weekEarn = weekSessions.reduce((a, s) => a + calcEarnings(s, jobs, employees, company), 0);
+  const weekEarn = summarize(weekSessions, data).revenueCents;
 
   const activeElapsed = active ? (() => {
     const start = new Date(active.start_time).getTime();
@@ -50,8 +51,9 @@ export default function DashboardTab({ jobs, employees, sessions, company, invoi
   const topJobsMax = topJobs[0]?.ms || 1;
 
   const hasEmployees = employees.length > 0;
-  const monthBilled = monthSessions.reduce((a, s) => a + calcEarnings(s, jobs, [], company), 0);
-  const monthLabour = monthSessions.reduce((a, s) => a + calcEarnings(s, jobs, employees, company), 0);
+  const monthSum = summarize(monthSessions, data);
+  const monthBilled = monthSum.revenueCents;
+  const monthLabour = monthSum.labourCents;
   const monthProfit = monthBilled - monthLabour;
 
   // Unbilled work, valued at billing rates (pre-tax).
@@ -60,14 +62,14 @@ export default function DashboardTab({ jobs, employees, sessions, company, invoi
     sessions.forEach(s => {
       if (s.invoice_id || !s.end_time) return;
       const e = byJob[s.job_id] || (byJob[s.job_id] = { ms: 0, amt: 0, n: 0 });
-      e.ms += calcDur(s); e.amt += calcEarnings(s, jobs, [], company); e.n += 1;
+      e.ms += calcDur(s); e.amt += sessionBilling(s, data).amountCents; e.n += 1;
     });
     const rows = Object.entries(byJob)
       .map(([id, v]) => ({ job: jobs.find(j => j.id === id), ...v }))
       .filter(x => x.job)
       .sort((a, b) => b.amt - a.amt);
     return { rows, ms: rows.reduce((a, r) => a + r.ms, 0), amt: rows.reduce((a, r) => a + r.amt, 0) };
-  }, [sessions, jobs, company]);
+  }, [sessions, jobs, employees, company]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const recent = useMemo(() => [...sessions].sort((a, b) => new Date(b.start_time) - new Date(a.start_time)).slice(0, 3), [sessions]);
 
@@ -169,18 +171,18 @@ export default function DashboardTab({ jobs, employees, sessions, company, invoi
       {/* Profit snapshot */}
       {hasEmployees && monthSessions.length > 0 && (
         <div style={{ ...card, margin: '0 16px 12px', padding: '18px 20px' }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: '#111', fontFamily: "'Syne', sans-serif", marginBottom: 12 }}>This Month · Profit</div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: '#111', fontFamily: "'Syne', sans-serif", marginBottom: 12 }}>This Month · Billable vs wages</div>
           <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
             <div>
-              <div style={{ fontSize: 11, color: '#999', fontFamily: "'DM Mono', monospace", letterSpacing: 0.5, marginBottom: 3 }}>BILLED</div>
+              <div style={{ fontSize: 11, color: '#999', fontFamily: "'DM Mono', monospace", letterSpacing: 0.5, marginBottom: 3 }}>BILLABLE</div>
               <div style={{ fontSize: 16, fontWeight: 700, color: '#111' }}>{fmtCAD(monthBilled)}</div>
             </div>
             <div>
-              <div style={{ fontSize: 11, color: '#999', fontFamily: "'DM Mono', monospace", letterSpacing: 0.5, marginBottom: 3 }}>LABOUR</div>
+              <div style={{ fontSize: 11, color: '#999', fontFamily: "'DM Mono', monospace", letterSpacing: 0.5, marginBottom: 3 }}>WAGES</div>
               <div style={{ fontSize: 16, fontWeight: 700, color: '#111' }}>{fmtCAD(monthLabour)}</div>
             </div>
             <div>
-              <div style={{ fontSize: 11, color: '#999', fontFamily: "'DM Mono', monospace", letterSpacing: 0.5, marginBottom: 3 }}>PROFIT</div>
+              <div style={{ fontSize: 11, color: '#999', fontFamily: "'DM Mono', monospace", letterSpacing: 0.5, marginBottom: 3 }}>AFTER WAGES</div>
               <div style={{ fontSize: 16, fontWeight: 700, color: monthProfit >= 0 ? '#1e8449' : '#C0392B' }}>
                 {monthProfit >= 0 ? '+' : ''}{fmtCAD(monthProfit)}
               </div>
@@ -210,7 +212,7 @@ export default function DashboardTab({ jobs, employees, sessions, company, invoi
                     {new Date(s.start_time).toLocaleDateString('en-CA', { month: 'short', day: 'numeric' })} · {fmtDur(calcDur(s))}
                   </div>
                 </div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: '#111', flexShrink: 0 }}>{fmtCAD(calcEarnings(s, jobs, employees, company))}</div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: '#111', flexShrink: 0 }}>{fmtCAD(sessionBilling(s, data).amountCents)}</div>
               </div>
             );
           })}
