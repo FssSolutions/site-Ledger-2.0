@@ -1,10 +1,12 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import Icon from '../components/Icon.jsx';
 import { card, ib, inp, lbl } from '../styles.js';
-import { fmtCAD, calcDur } from '../lib/utils.js';
+import { calcDur } from '../lib/utils.js';
+import { fmtCAD as fmtCents, toCents } from '../lib/billing.js';
+const fmtCAD = v => fmtCents(toCents(v));
 import { useAccentColor } from '../lib/AccentColorContext.js';
 
-export default function CompanyTab({ employees, onAddEmp, onUpdateEmp, onDeleteEmp, customers, onAddCust, onUpdateCust, onDeleteCust, invoices, sessions = [], onUpdateInvoice, onDeleteInvoice, company, onUpdateCompany, isDesktop }) {
+export default function CompanyTab({ employees, onAddEmp, onUpdateEmp, onDeleteEmp, customers, onAddCust, onUpdateCust, onDeleteCust, invoices, invoiceLines = [], sessions = [], onSetInvoiceStatus, onDeleteInvoice, company, onUpdateCompany, isDesktop }) {
   const accent = useAccentColor();
   const [view, setView] = useState('crew');
 
@@ -21,6 +23,10 @@ export default function CompanyTab({ employees, onAddEmp, onUpdateEmp, onDeleteE
   // --- Company state ---
   const [compForm, setCompForm] = useState(company || {});
   const [compSaved, setCompSaved] = useState(false);
+  const [busyInvoice, setBusyInvoice] = useState(null);
+  // Refresh the form when the profile arrives from sync (not while editing).
+  const compDirty = useRef(false);
+  useEffect(() => { if (!compDirty.current) setCompForm(company || {}); }, [company?.id, company?.name]); // eslint-disable-line react-hooks/exhaustive-deps
   const fileRef = useRef(null);
 
   function handleLogoUpload(e) {
@@ -28,12 +34,14 @@ export default function CompanyTab({ employees, onAddEmp, onUpdateEmp, onDeleteE
     if (!file) return;
     if (file.size > 500000) { alert('Logo must be under 500KB'); return; }
     const reader = new FileReader();
-    reader.onload = () => setCompForm(p => ({ ...p, logo: reader.result }));
+    reader.onload = () => { compDirty.current = true; setCompForm(p => ({ ...p, logo: reader.result })); };
     reader.readAsDataURL(file);
   }
 
-  function saveCompany() {
-    onUpdateCompany(compForm);
+  async function saveCompany() {
+    const r = await onUpdateCompany(compForm);
+    if (!r?.ok) return;
+    compDirty.current = false;
     setCompSaved(true);
     setTimeout(() => setCompSaved(false), 2000);
   }
@@ -57,10 +65,10 @@ export default function CompanyTab({ employees, onAddEmp, onUpdateEmp, onDeleteE
             <div key={emp.id} style={{ ...card, padding: '16px 18px', marginBottom: 10 }}>
               {editEmpId === emp.id ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  <input value={empForm.name} onChange={e => setEmpForm({ ...empForm, name: e.target.value })} placeholder="Name" style={inp} />
-                  <input type="number" value={empForm.rate} onChange={e => setEmpForm({ ...empForm, rate: e.target.value })} placeholder="Hourly rate (CAD)" style={inp} />
+                  <input value={empForm.name} onChange={e => setEmpForm({ ...empForm, name: e.target.value })} placeholder="Name" aria-label="Name" style={inp} />
+                  <input type="number" value={empForm.rate} onChange={e => setEmpForm({ ...empForm, rate: e.target.value })} placeholder="Hourly wage (CAD)" aria-label="Hourly wage (CAD)" inputMode="decimal" min="0" step="0.01" style={inp} />
                   <div style={{ display: 'flex', gap: 8 }}>
-                    <button onClick={() => { onUpdateEmp({ ...emp, name: empForm.name, rate: parseFloat(empForm.rate) }); setEditEmpId(null); }}
+                    <button type="button" onClick={async () => { const r = await onUpdateEmp({ ...emp, name: empForm.name, rate: empForm.rate }); if (r?.ok) setEditEmpId(null); }}
                       style={{ flex: 1, padding: '10px', borderRadius: 8, border: 'none', background: accent, color: '#fff', fontWeight: 700, cursor: 'pointer' }}>Save</button>
                     <button onClick={() => setEditEmpId(null)} style={{ padding: '10px 14px', borderRadius: 8, border: '1px solid #e0e0e0', background: 'transparent', color: '#888', cursor: 'pointer' }}>Cancel</button>
                   </div>
@@ -72,7 +80,7 @@ export default function CompanyTab({ employees, onAddEmp, onUpdateEmp, onDeleteE
                     <div style={{ color: '#111', fontSize: 14, fontWeight: 600 }}>{emp.name}</div>
                     <div style={{ color: '#999', fontSize: 12 }}>{fmtCAD(emp.rate)}/hr</div>
                   </div>
-                  <button onClick={() => { setEditEmpId(emp.id); setEmpForm({ name: emp.name, rate: String(emp.rate) }); }} style={{ ...ib, color: '#aaa', marginRight: 4 }}><Icon name="edit" size={15} /></button>
+                  <button onClick={() => { setEditEmpId(emp.id); setEmpForm({ name: emp.name, rate: emp.rate == null ? '' : String(emp.rate) }); }} style={{ ...ib, color: '#aaa', marginRight: 4 }}><Icon name="edit" size={15} /></button>
                   <button onClick={() => { if (confirm(`Remove ${emp.name}?`)) onDeleteEmp(emp.id); }} style={{ ...ib, color: '#e74c3c' }}><Icon name="trash" size={15} /></button>
                 </div>
               )}
@@ -81,10 +89,10 @@ export default function CompanyTab({ employees, onAddEmp, onUpdateEmp, onDeleteE
           {showAddEmp ? (
             <div style={{ ...card, padding: '16px 18px' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <input value={empForm.name} onChange={e => setEmpForm({ ...empForm, name: e.target.value })} placeholder="Employee name" style={inp} />
-                <input type="number" value={empForm.rate} onChange={e => setEmpForm({ ...empForm, rate: e.target.value })} placeholder="Hourly rate (CAD)" style={inp} />
+                <input value={empForm.name} onChange={e => setEmpForm({ ...empForm, name: e.target.value })} placeholder="Employee name" aria-label="Employee name" style={inp} />
+                <input type="number" value={empForm.rate} onChange={e => setEmpForm({ ...empForm, rate: e.target.value })} placeholder="Hourly wage (CAD)" aria-label="Hourly wage (CAD)" inputMode="decimal" min="0" step="0.01" style={inp} />
                 <div style={{ display: 'flex', gap: 8 }}>
-                  <button onClick={() => { if (!empForm.name || !empForm.rate) return; onAddEmp({ name: empForm.name, rate: parseFloat(empForm.rate) }); setEmpForm({ name: '', rate: '' }); setShowAddEmp(false); }}
+                  <button type="button" onClick={async () => { const r = await onAddEmp({ name: empForm.name, rate: empForm.rate }); if (r?.ok) { setEmpForm({ name: '', rate: '' }); setShowAddEmp(false); } }}
                     style={{ flex: 1, padding: '10px', borderRadius: 8, border: 'none', background: accent, color: '#fff', fontWeight: 700, cursor: 'pointer' }}>Add</button>
                   <button onClick={() => setShowAddEmp(false)} style={{ padding: '10px 14px', borderRadius: 8, border: '1px solid #e0e0e0', background: 'transparent', color: '#888', cursor: 'pointer' }}>Cancel</button>
                 </div>
@@ -107,12 +115,12 @@ export default function CompanyTab({ employees, onAddEmp, onUpdateEmp, onDeleteE
             <div key={cust.id} style={{ ...card, padding: '16px 18px', marginBottom: 10 }}>
               {editCustId === cust.id ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  <input value={custForm.name} onChange={e => setCustForm({ ...custForm, name: e.target.value })} placeholder="Customer name" style={inp} />
-                  <input value={custForm.phone} onChange={e => setCustForm({ ...custForm, phone: e.target.value })} placeholder="Phone number" type="tel" style={inp} />
-                  <input value={custForm.email} onChange={e => setCustForm({ ...custForm, email: e.target.value })} placeholder="Email" type="email" style={inp} />
-                  <input value={custForm.address} onChange={e => setCustForm({ ...custForm, address: e.target.value })} placeholder="Address" style={inp} />
+                  <input value={custForm.name} onChange={e => setCustForm({ ...custForm, name: e.target.value })} placeholder="Customer name" aria-label="Customer name" style={inp} />
+                  <input value={custForm.phone} onChange={e => setCustForm({ ...custForm, phone: e.target.value })} placeholder="Phone number" aria-label="Phone number" type="tel" style={inp} />
+                  <input value={custForm.email} onChange={e => setCustForm({ ...custForm, email: e.target.value })} placeholder="Email" aria-label="Email" type="email" style={inp} />
+                  <input value={custForm.address} onChange={e => setCustForm({ ...custForm, address: e.target.value })} placeholder="Address" aria-label="Address" style={inp} />
                   <div style={{ display: 'flex', gap: 8 }}>
-                    <button onClick={() => { if (!custForm.name) return; onUpdateCust({ ...cust, ...custForm }); setEditCustId(null); }}
+                    <button type="button" onClick={async () => { const r = await onUpdateCust({ ...cust, ...custForm }); if (r?.ok) setEditCustId(null); }}
                       style={{ flex: 1, padding: '10px', borderRadius: 8, border: 'none', background: accent, color: '#fff', fontWeight: 700, cursor: 'pointer' }}>Save</button>
                     <button onClick={() => setEditCustId(null)} style={{ padding: '10px 14px', borderRadius: 8, border: '1px solid #e0e0e0', background: 'transparent', color: '#888', cursor: 'pointer' }}>Cancel</button>
                   </div>
@@ -135,10 +143,10 @@ export default function CompanyTab({ employees, onAddEmp, onUpdateEmp, onDeleteE
           {showAddCust ? (
             <div style={{ ...card, padding: '16px 18px' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <input value={custForm.name} onChange={e => setCustForm({ ...custForm, name: e.target.value })} placeholder="Customer name" style={inp} />
-                <input value={custForm.phone} onChange={e => setCustForm({ ...custForm, phone: e.target.value })} placeholder="Phone number" type="tel" style={inp} />
-                <input value={custForm.email} onChange={e => setCustForm({ ...custForm, email: e.target.value })} placeholder="Email" type="email" style={inp} />
-                <input value={custForm.address} onChange={e => setCustForm({ ...custForm, address: e.target.value })} placeholder="Address" style={inp} />
+                <input value={custForm.name} onChange={e => setCustForm({ ...custForm, name: e.target.value })} placeholder="Customer name" aria-label="Customer name" style={inp} />
+                <input value={custForm.phone} onChange={e => setCustForm({ ...custForm, phone: e.target.value })} placeholder="Phone number" aria-label="Phone number" type="tel" style={inp} />
+                <input value={custForm.email} onChange={e => setCustForm({ ...custForm, email: e.target.value })} placeholder="Email" aria-label="Email" type="email" style={inp} />
+                <input value={custForm.address} onChange={e => setCustForm({ ...custForm, address: e.target.value })} placeholder="Address" aria-label="Address" style={inp} />
                 <div style={{ display: 'flex', gap: 8 }}>
                   <button onClick={() => { if (!custForm.name) return; onAddCust({ name: custForm.name, phone: custForm.phone, email: custForm.email, address: custForm.address }); setCustForm({ name: '', phone: '', email: '', address: '' }); setShowAddCust(false); }}
                     style={{ flex: 1, padding: '10px', borderRadius: 8, border: 'none', background: accent, color: '#fff', fontWeight: 700, cursor: 'pointer' }}>Add</button>
@@ -164,6 +172,7 @@ export default function CompanyTab({ employees, onAddEmp, onUpdateEmp, onDeleteE
           {[...(invoices || [])].reverse().map(inv => {
             const isPaid = inv.status === 'paid';
             const covered = sessions.filter(s => s.invoice_id === inv.id);
+            const lineCount = invoiceLines.filter(l => l.invoice_id === inv.id).length;
             const coveredHrs = covered.reduce((a, s) => a + calcDur(s), 0) / 3600000;
             return (
               <div key={inv.id} style={{ ...card, padding: '14px 16px', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -174,15 +183,19 @@ export default function CompanyTab({ employees, onAddEmp, onUpdateEmp, onDeleteE
                   </div>
                   <div style={{ color: '#333', fontSize: 13, fontWeight: 600, marginTop: 2 }}>{fmtCAD(Number(inv.amount))}</div>
                   {covered.length > 0 && (
-                    <div style={{ color: '#aaa', fontSize: 11, marginTop: 2 }}>{covered.length} entr{covered.length === 1 ? 'y' : 'ies'} · {coveredHrs.toFixed(2)} hrs billed</div>
+                    <div style={{ color: '#777', fontSize: 11, marginTop: 2 }}>{covered.length} entr{covered.length === 1 ? 'y' : 'ies'} · {coveredHrs.toFixed(2)} hrs billed</div>
                   )}
+                  {inv.calculated_total != null && Number(inv.calculated_total) !== Number(inv.amount) && (
+                    <div style={{ color: '#777', fontSize: 11 }}>Calculated from hours: {fmtCAD(inv.calculated_total)}</div>
+                  )}
+                  {!inv.issued_at && <div style={{ color: '#777', fontSize: 11 }}>Recorded before line-by-line snapshots{lineCount ? '' : ' (no stored lines)'}</div>}
                 </div>
-                <button
-                  onClick={() => onUpdateInvoice({ ...inv, status: isPaid ? 'unpaid' : 'paid' })}
+                <button type="button" disabled={busyInvoice === inv.id} aria-label={isPaid ? 'Marked paid. Mark as unpaid' : 'Unpaid. Mark as paid'}
+                  onClick={async () => { setBusyInvoice(inv.id); await onSetInvoiceStatus(inv.id, isPaid ? 'unpaid' : 'paid'); setBusyInvoice(null); }}
                   style={{ padding: '6px 12px', borderRadius: 20, border: 'none', fontSize: 11, fontWeight: 700, cursor: 'pointer', background: isPaid ? '#3BB273' : '#f0f0f0', color: isPaid ? '#fff' : '#888', flexShrink: 0 }}>
                   {isPaid ? 'Paid' : 'Unpaid'}
                 </button>
-                <button onClick={() => { if (confirm(covered.length ? `Delete this invoice record? Its ${covered.length} entr${covered.length === 1 ? 'y' : 'ies'} will go back to unbilled.` : 'Delete this invoice record?')) onDeleteInvoice(inv.id); }} style={{ ...ib, color: '#e74c3c' }}><Icon name="trash" size={14} /></button>
+                <button type="button" aria-label="Delete invoice record" disabled={busyInvoice === inv.id} onClick={async () => { if (!window.confirm(covered.length ? `Delete this invoice record? Its ${covered.length} entr${covered.length === 1 ? 'y' : 'ies'} will go back to unbilled. The QuickBooks invoice is not affected. Needs internet.` : 'Delete this invoice record? Needs internet.')) return; setBusyInvoice(inv.id); await onDeleteInvoice(inv.id); setBusyInvoice(null); }} style={{ ...ib, color: '#c0392b', padding: 8 }}><Icon name="trash" size={14} /></button>
               </div>
             );
           })}
@@ -204,7 +217,7 @@ export default function CompanyTab({ employees, onAddEmp, onUpdateEmp, onDeleteE
                   {compForm.logo ? (
                     <div style={{ position: 'relative' }}>
                       <img src={compForm.logo} alt="Logo" style={{ width: 60, height: 60, objectFit: 'contain', borderRadius: 8, border: '1px solid #e0e0e0' }} />
-                      <button onClick={() => setCompForm(p => ({ ...p, logo: '' }))}
+                      <button type="button" aria-label="Remove logo" onClick={() => { compDirty.current = true; setCompForm(p => ({ ...p, logo: '' })); }}
                         style={{ position: 'absolute', top: -6, right: -6, width: 20, height: 20, borderRadius: '50%', background: '#e74c3c', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         &times;
                       </button>
@@ -221,44 +234,44 @@ export default function CompanyTab({ employees, onAddEmp, onUpdateEmp, onDeleteE
               </div>
 
               <div>
-                <label style={lbl}>Company Name</label>
-                <input style={inp} value={compForm.name || ''} onChange={e => setCompForm(p => ({ ...p, name: e.target.value }))} placeholder="e.g. Smith Carpentry Ltd." />
+                <label style={lbl} aria-hidden="true">Company Name</label>
+                <input aria-label="Company Name" style={inp} value={compForm.name || ''} onChange={e => { compDirty.current = true; setCompForm(p => ({ ...p, name: e.target.value })); }} placeholder="e.g. Smith Carpentry Ltd." />
               </div>
 
               <div>
-                <label style={lbl}>Phone</label>
-                <input style={inp} type="tel" value={compForm.phone || ''} onChange={e => setCompForm(p => ({ ...p, phone: e.target.value }))} placeholder="e.g. (604) 555-1234" />
+                <label style={lbl} aria-hidden="true">Phone</label>
+                <input aria-label="Phone" style={inp} type="tel" value={compForm.phone || ''} onChange={e => { compDirty.current = true; setCompForm(p => ({ ...p, phone: e.target.value })); }} placeholder="e.g. (604) 555-1234" />
               </div>
 
               <div>
-                <label style={lbl}>Email</label>
-                <input style={inp} type="email" value={compForm.email || ''} onChange={e => setCompForm(p => ({ ...p, email: e.target.value }))} placeholder="e.g. info@smithcarpentry.ca" />
+                <label style={lbl} aria-hidden="true">Email</label>
+                <input aria-label="Email" style={inp} type="email" value={compForm.email || ''} onChange={e => { compDirty.current = true; setCompForm(p => ({ ...p, email: e.target.value })); }} placeholder="e.g. info@smithcarpentry.ca" />
               </div>
 
               <div>
-                <label style={lbl}>Address</label>
-                <input style={inp} value={compForm.address || ''} onChange={e => setCompForm(p => ({ ...p, address: e.target.value }))} placeholder="e.g. 123 Main St, Vancouver, BC" />
+                <label style={lbl} aria-hidden="true">Address</label>
+                <input aria-label="Address" style={inp} value={compForm.address || ''} onChange={e => { compDirty.current = true; setCompForm(p => ({ ...p, address: e.target.value })); }} placeholder="e.g. 123 Main St, Vancouver, BC" />
               </div>
 
               <div>
-                <label style={lbl}>Half Day Rate (CAD)</label>
-                <input style={inp} type="number" min="0" step="0.01" value={compForm.halfDayRate || ''} onChange={e => setCompForm(p => ({ ...p, halfDayRate: e.target.value }))} placeholder="e.g. 400" />
+                <label style={lbl} aria-hidden="true">Half Day Rate (CAD)</label>
+                <input aria-label="Half Day Rate (CAD)" style={inp} type="number" min="0" step="0.01" value={compForm.halfDayRate ?? ''} onChange={e => { compDirty.current = true; setCompForm(p => ({ ...p, halfDayRate: e.target.value })); }} placeholder="e.g. 400" />
                 <div style={{ color: '#bbb', fontSize: 11, marginTop: 6 }}>Default rate for fixed-price jobs. Can be overridden per job.</div>
               </div>
 
               <div>
-                <label style={lbl}>Full Day Rate (CAD)</label>
-                <input style={inp} type="number" min="0" step="0.01" value={compForm.fullDayRate || ''} onChange={e => setCompForm(p => ({ ...p, fullDayRate: e.target.value }))} placeholder="e.g. 750" />
+                <label style={lbl} aria-hidden="true">Full Day Rate (CAD)</label>
+                <input aria-label="Full Day Rate (CAD)" style={inp} type="number" min="0" step="0.01" value={compForm.fullDayRate ?? ''} onChange={e => { compDirty.current = true; setCompForm(p => ({ ...p, fullDayRate: e.target.value })); }} placeholder="e.g. 750" />
               </div>
 
               <div>
-                <label style={lbl}>GST Number</label>
-                <input style={inp} value={compForm.gstNumber || ''} onChange={e => setCompForm(p => ({ ...p, gstNumber: e.target.value }))} placeholder="e.g. 123456789 RT0001" />
+                <label style={lbl} aria-hidden="true">GST Number</label>
+                <input aria-label="GST Number" style={inp} value={compForm.gstNumber || ''} onChange={e => { compDirty.current = true; setCompForm(p => ({ ...p, gstNumber: e.target.value })); }} placeholder="e.g. 123456789 RT0001" />
               </div>
 
               <div>
-                <label style={lbl}>WorkSafe BC Number</label>
-                <input style={inp} value={compForm.worksafeNumber || ''} onChange={e => setCompForm(p => ({ ...p, worksafeNumber: e.target.value }))} placeholder="e.g. 1234567" />
+                <label style={lbl} aria-hidden="true">WorkSafe BC Number</label>
+                <input aria-label="WorkSafe BC Number" style={inp} value={compForm.worksafeNumber || ''} onChange={e => { compDirty.current = true; setCompForm(p => ({ ...p, worksafeNumber: e.target.value })); }} placeholder="e.g. 1234567" />
               </div>
 
               <button onClick={saveCompany}

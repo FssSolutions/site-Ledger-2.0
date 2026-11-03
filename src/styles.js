@@ -1,11 +1,11 @@
 export const inp = {
   width: '100%', padding: '12px 14px', borderRadius: 10,
   border: '1px solid #e0e0e0', background: '#f9f9f9', color: '#111',
-  fontSize: 15, fontFamily: 'inherit', boxSizing: 'border-box', outline: 'none',
+  fontSize: 16, fontFamily: 'inherit', boxSizing: 'border-box',
 };
 
 export const lbl = {
-  color: '#999', fontSize: 11, fontFamily: "'DM Mono', monospace",
+  color: '#6b6b6b', fontSize: 11, fontFamily: "'DM Mono', monospace",
   letterSpacing: 1.5, textTransform: 'uppercase', display: 'block', marginBottom: 6,
 };
 

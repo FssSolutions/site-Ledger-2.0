@@ -359,6 +359,26 @@ export function createLedgerStore(db, uid, { now = () => Date.now(), onChange = 
       changed({ table });
     },
 
+    // Stores rows returned by a server function (e.g. a recorded invoice)
+    // without waiting for the next full pull. Rows with local changes keep
+    // their local values.
+    async putServerRows(table, rows) {
+      await tx(db, ['records', 'outbox'], 'readwrite', async ({ records, outbox }) => {
+        for (const row of rows) {
+          if (!row || (row.user_id && row.user_id !== uid)) continue;
+          const ops = await getAllByIndex(outbox, 'byRecord', recordOpsRange(uid, table, row.id));
+          if (ops.length) continue;
+          records.put({ uid, table, id: row.id, data: row, base: row, syncedAt: now(), deleted: false });
+        }
+      });
+      changed({ table });
+    },
+
+    async removeServerRow(table, id) {
+      await tx(db, 'records', 'readwrite', ({ records }) => { records.delete([uid, table, id]); });
+      changed({ table });
+    },
+
     // Counts used by sign-out and the account banner.
     async pendingCount() {
       return (await this.listOps()).length;

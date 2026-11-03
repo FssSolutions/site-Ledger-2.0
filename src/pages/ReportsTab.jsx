@@ -1,84 +1,90 @@
-import { useState } from 'react';
+import { useMemo, useState, lazy, Suspense } from 'react';
 import Icon from '../components/Icon.jsx';
-import InvoiceModal from '../components/InvoiceModal.jsx';
 import { card, inp } from '../styles.js';
-import { CRA_RATE } from '../lib/constants.js';
-import { fmtDur, fmtCAD, calcEarnings, calcDur, calcOvertime } from '../lib/utils.js';
+import { fmtDur, calcDur } from '../lib/utils.js';
+import { fmtCAD, sessionBilling, sessionLabourCents, summarize, toCents } from '../lib/billing.js';
+import { presetRange, sessionInRange, inRange, localDateKey, localTimeHHMM } from '../lib/time.js';
+import { overtimeForRange } from '../lib/overtime.js';
+import { mileageEstimates } from '../lib/mileage.js';
+import { toCsv, downloadText } from '../lib/csv.js';
 import { useAccentColor } from '../lib/AccentColorContext.js';
 
-export default function ReportsTab({ jobs, employees, sessions, mileage, expenses, company, customers, taxRate, isDesktop, onRecordInvoice }) {
+const InvoiceModal = lazy(() => import('../components/InvoiceModal.jsx'));
+
+const Stat = ({ label, value, color = '#111', hint }) => (
+  <div style={{ ...card, padding: '16px 18px' }} title={hint}>
+    <div style={{ color: '#666', fontSize: 11, fontFamily: "'DM Mono', monospace", letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 6 }}>{label}</div>
+    <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Syne', sans-serif", color }}>{value}</div>
+    {hint && <div style={{ color: '#888', fontSize: 11, marginTop: 4 }}>{hint}</div>}
+  </div>
+);
+
+export default function ReportsTab({ jobs, employees, sessions, openSessions = [], mileage, expenses, company, customers, taxRate, otRules, isDesktop, ledger, toast }) {
   const accent = useAccentColor();
   const [pre, setPre] = useState('month');
   const [cs, setCs] = useState('');
   const [ce, setCe] = useState('');
   const [showInvoice, setShowInvoice] = useState(false);
-  const now = new Date();
+  const range = presetRange(pre, new Date(), { start: cs, end: ce });
+  const data = { jobs, employees, company };
 
-  function range() {
-    if (pre === 'week') { const s = new Date(now); s.setDate(now.getDate() - 6); s.setHours(0, 0, 0, 0); const e = new Date(now); e.setHours(23, 59, 59, 999); return [s, e]; }
-    if (pre === 'month') return [new Date(now.getFullYear(), now.getMonth(), 1), new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999)];
-    if (pre === 'lastmonth') { const s = new Date(now.getFullYear(), now.getMonth() - 1, 1), e = new Date(now.getFullYear(), now.getMonth(), 0); e.setHours(23, 59, 59, 999); return [s, e]; }
-    if (pre === 'year') return [new Date(now.getFullYear(), 0, 1), now];
-    if (pre === 'custom' && cs && ce) { return [new Date(cs + 'T00:00:00'), new Date(ce + 'T23:59:59.999')]; }
-    return [new Date(0), new Date(8640000000000000)];
-  }
-
-  const [rs, re] = range();
-  const f = sessions.filter(s => { const t = new Date(s.start_time); return t >= rs && t <= re && s.end_time; });
-  const fm = mileage.filter(m => { const t = new Date(m.date); return t >= rs && t <= re; });
-  const fe = (expenses || []).filter(e => { const t = new Date(e.date); return t >= rs && t <= re; });
-  const te = f.reduce((s, x) => s + calcEarnings(x, jobs, employees, company), 0);
-  const totalExp = fe.reduce((s, x) => s + Number(x.amount), 0);
-  const netProfit = te - totalExp;
+  const f = useMemo(() => sessions.filter(s => s.end_time && sessionInRange(s, range)), [sessions, range[0], range[1]]); // eslint-disable-line react-hooks/exhaustive-deps
+  const fm = mileage.filter(m => inRange(String(m.date), range));
+  const fe = (expenses || []).filter(e => inRange(String(e.date), range));
+  const sum = summarize(f, data);
+  const expensesCents = fe.reduce((s, x) => s + toCents(x.amount), 0);
+  const marginCents = sum.revenueCents - sum.labourCents - expensesCents;
   const tm = f.reduce((s, x) => s + calcDur(x), 0);
-  const totalKm = fm.reduce((s, x) => s + Number(x.km), 0);
-  const bj = jobs.map(j => { const js = f.filter(s => s.job_id === j.id); return { ...j, e: js.reduce((s, x) => s + calcEarnings(x, jobs, employees, company), 0), h: js.reduce((s, x) => s + calcDur(x), 0), n: js.length }; }).filter(j => j.n > 0).sort((a, b) => b.e - a.e);
-  const be = employees.map(e => { const es = f.filter(s => s.employee_id === e.id); const hrs = es.reduce((s, x) => s + calcDur(x), 0) / 3600000; const cost = hrs * e.rate; const billed = es.reduce((s, x) => s + calcEarnings(x, jobs, [], company), 0); return { ...e, hrs, cost, billed, profit: billed - cost, n: es.length }; }).filter(e => e.n > 0).sort((a, b) => b.hrs - a.hrs);
+  const totalKm = fm.reduce((s, x) => s + Number(x.km || 0), 0);
+  const est = mileageEstimates(mileage);
+  const kmEstimateCents = fm.reduce((s, m) => s + (est[m.id]?.cents || 0), 0);
+  const kmUnverified = fm.some(m => est[m.id] && !est[m.id].verified);
 
-  // Overtime calculations
-  const ot = calcOvertime(f);
-  const otDays = Object.values(ot.daily).filter(d => d.overtime > 0);
-  const otWeeks = Object.values(ot.weekly).filter(w => w.overtime > 0);
-  const totalDailyOT = otDays.reduce((s, d) => s + d.overtime, 0);
-  const totalWeeklyOT = otWeeks.reduce((s, w) => s + w.overtime, 0);
-  const hasOT = otDays.length > 0 || otWeeks.length > 0;
+  const bj = jobs.map(j => {
+    const js = f.filter(s => s.job_id === j.id);
+    const s2 = summarize(js, data);
+    const exp = fe.filter(e => e.job_id === j.id).reduce((a, e) => a + toCents(e.amount), 0);
+    return { ...j, revenue: s2.revenueCents, labour: s2.labourCents, exp, h: js.reduce((s, x) => s + calcDur(x), 0), n: js.length };
+  }).filter(j => j.n > 0 || j.exp > 0).sort((a, b) => b.revenue - a.revenue);
 
-  // Per-employee overtime
-  const empOT = employees.map(e => {
+  const be = employees.map(e => {
     const es = f.filter(s => s.employee_id === e.id);
-    const eot = calcOvertime(es);
-    const dailyOT = Object.values(eot.daily).reduce((s, d) => s + d.overtime, 0);
-    const weeklyOT = Object.values(eot.weekly).reduce((s, w) => s + w.overtime, 0);
-    return { ...e, dailyOT, weeklyOT };
-  }).filter(e => e.dailyOT > 0 || e.weeklyOT > 0);
+    const s2 = summarize(es, data);
+    return { ...e, hrs: es.reduce((a, x) => a + calcDur(x), 0) / 3600000, cost: s2.labourCents, billed: s2.revenueCents, n: es.length };
+  }).filter(e => e.n > 0).sort((a, b) => b.hrs - a.hrs);
+
+  const ot = overtimeForRange(sessions, range, otRules);
+  const workerName = w => (w === 'owner' ? 'Me (owner)' : employees.find(e => e.id === w)?.name || 'Former crew member');
 
   function exportCSV() {
-    const rows = [['Date', 'Job', 'Employee', 'Start', 'End', 'Hours', 'Earnings (CAD)']];
-    f.forEach(s => {
+    const rows = [['Date', 'Job', 'Worker', 'Start', 'End', 'Break (min)', 'Hours', 'Billing basis', 'Billed rate', 'Billed (CAD)', 'Wage rate', 'Wages (CAD)', 'Invoiced']];
+    [...f].sort((a, b) => Date.parse(a.start_time) - Date.parse(b.start_time)).forEach(s => {
       const j = jobs.find(x => x.id === s.job_id);
       const emp = employees.find(x => x.id === s.employee_id);
-      rows.push([new Date(s.start_time).toLocaleDateString('en-CA'), j?.name || '', emp?.name || 'Owner', new Date(s.start_time).toLocaleTimeString('en-CA'), new Date(s.end_time).toLocaleTimeString('en-CA'), (calcDur(s) / 3600000).toFixed(2), calcEarnings(s, jobs, employees, company).toFixed(2)]);
+      const b = sessionBilling(s, data);
+      rows.push([
+        localDateKey(s.start_time), j?.name || '', emp?.name || 'Owner', localTimeHHMM(s.start_time), localTimeHHMM(s.end_time),
+        Math.round((s.break_seconds || 0) / 60), Number((calcDur(s) / 3600000).toFixed(2)), b.basis || '',
+        b.unitPriceCents / 100, b.amountCents / 100, s.employee_id ? Number(s.cost_rate ?? emp?.rate ?? 0) : '',
+        s.employee_id ? sessionLabourCents(s, data) / 100 : '', s.invoice_id ? 'yes' : 'no',
+      ]);
     });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob([rows.map(r => r.join(',')).join('\n')], { type: 'text/csv' }));
-    a.download = 'site-ledger-report.csv';
-    a.click();
+    downloadText(`site-ledger-${range[0]}-to-${range[1]}.csv`, toCsv(rows, { numericCols: [5, 6, 8, 9, 10, 11] }));
   }
 
   return (
     <div style={{ padding: isDesktop ? '0 0 24px' : '0 0 100px' }}>
       {showInvoice && (
-        <InvoiceModal
-          sessions={sessions} jobs={jobs} employees={employees} customers={customers}
-          dateRange={[rs, re]} company={company} taxRate={taxRate} onClose={() => setShowInvoice(false)}
-          onRecordInvoice={onRecordInvoice}
-        />
+        <Suspense fallback={null}>
+          <InvoiceModal sessions={sessions} openSessions={openSessions} jobs={jobs} employees={employees} customers={customers}
+            dateRange={range} company={company} taxRate={taxRate} ledger={ledger} toast={toast} onClose={() => setShowInvoice(false)} />
+        </Suspense>
       )}
 
-      <div style={{ display: 'flex', gap: 6, padding: '16px 16px 0', flexWrap: 'wrap' }}>
+      <div role="group" aria-label="Report period" style={{ display: 'flex', gap: 6, padding: '16px 16px 0', flexWrap: 'wrap' }}>
         {[{ id: 'week', l: '7 Days' }, { id: 'month', l: 'This Month' }, { id: 'lastmonth', l: 'Last Month' }, { id: 'year', l: 'This Year' }, { id: 'custom', l: 'Custom' }].map(p => (
-          <button key={p.id} onClick={() => setPre(p.id)}
-            style={{ padding: '8px 14px', borderRadius: 20, border: pre === p.id ? 'none' : '1px solid #e0e0e0', background: pre === p.id ? accent : '#fff', color: pre === p.id ? '#fff' : '#888', fontSize: 13, fontWeight: pre === p.id ? 700 : 400, cursor: 'pointer' }}>
+          <button key={p.id} type="button" onClick={() => setPre(p.id)} aria-pressed={pre === p.id}
+            style={{ padding: '8px 14px', borderRadius: 20, border: pre === p.id ? 'none' : '1px solid #ddd', background: pre === p.id ? accent : '#fff', color: pre === p.id ? '#fff' : '#555', fontSize: 13, fontWeight: pre === p.id ? 700 : 400, cursor: 'pointer' }}>
             {p.l}
           </button>
         ))}
@@ -86,81 +92,61 @@ export default function ReportsTab({ jobs, employees, sessions, mileage, expense
 
       {pre === 'custom' && (
         <div style={{ display: 'flex', gap: 8, padding: '12px 16px 0' }}>
-          <input type="date" value={cs} onChange={e => setCs(e.target.value)} style={{ ...inp, flex: 1 }} />
-          <input type="date" value={ce} onChange={e => setCe(e.target.value)} style={{ ...inp, flex: 1 }} />
+          <input aria-label="From date" type="date" value={cs} onChange={e => setCs(e.target.value)} style={{ ...inp, flex: 1 }} />
+          <input aria-label="To date" type="date" value={ce} onChange={e => setCe(e.target.value)} style={{ ...inp, flex: 1 }} />
+        </div>
+      )}
+      <div style={{ padding: '8px 16px 0', color: '#777', fontSize: 12 }}>{range[0] === '0000-01-01' ? 'All dates' : `${range[0]} to ${range[1]}`} · local time</div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, padding: '12px 16px 0' }}>
+        <Stat label="Billable" value={fmtCAD(sum.revenueCents)} color={accent} hint="Job rates × hours, before tax" />
+        <Stat label="Hours" value={fmtDur(tm)} />
+        <Stat label="Crew wages" value={fmtCAD(sum.labourCents)} hint="Employee wages × hours" />
+        <Stat label="Expenses" value={fmtCAD(expensesCents)} color="#A93226" />
+        <Stat label="Gross margin" value={fmtCAD(marginCents)} color={marginCents >= 0 ? '#1e6b3a' : '#A93226'} hint="Billable − wages − expenses (your own pay not deducted)" />
+        <Stat label="Mileage" value={`${totalKm.toFixed(0)} km`} hint={`≈ ${fmtCAD(kmEstimateCents)} at CRA allowance rates${kmUnverified ? ' (rate unverified)' : ''}`} />
+      </div>
+      {(sum.legacyCount > 0 || sum.missingCount > 0) && (
+        <div style={{ margin: '10px 16px 0', fontSize: 12, color: '#7a4a10', background: '#fff8f0', border: '1px solid #f0c070', borderRadius: 10, padding: '8px 12px' }}>
+          {sum.legacyCount > 0 && <div>{sum.legacyCount} entr{sum.legacyCount === 1 ? 'y was' : 'ies were'} recorded before rates were saved with each entry, so {sum.legacyCount === 1 ? 'it uses' : 'they use'} the current job and wage rates.</div>}
+          {sum.missingCount > 0 && <div>{sum.missingCount} fixed-price entr{sum.missingCount === 1 ? 'y has' : 'ies have'} no half/full day chosen and bill $0 until edited.</div>}
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, padding: '12px 16px 0' }}>
-        <div style={{ ...card, padding: '16px 18px' }}><div style={{ color: '#999', fontSize: 11, fontFamily: "'DM Mono', monospace", letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 6 }}>Earned</div><div style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Syne', sans-serif", color: accent }}>{fmtCAD(te)}</div></div>
-        <div style={{ ...card, padding: '16px 18px' }}><div style={{ color: '#999', fontSize: 11, fontFamily: "'DM Mono', monospace", letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 6 }}>Hours</div><div style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Syne', sans-serif", color: '#111' }}>{fmtDur(tm)}</div></div>
-        <div style={{ ...card, padding: '16px 18px' }}><div style={{ color: '#999', fontSize: 11, fontFamily: "'DM Mono', monospace", letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 6 }}>Mileage</div><div style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Syne', sans-serif", color: '#111' }}>{totalKm.toFixed(0)} km</div></div>
-        <div style={{ ...card, padding: '16px 18px' }}><div style={{ color: '#999', fontSize: 11, fontFamily: "'DM Mono', monospace", letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 6 }}>KM Deduction</div><div style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Syne', sans-serif", color: '#3BB273' }}>{fmtCAD(totalKm * CRA_RATE)}</div></div>
-        {fe.length > 0 && <>
-          <div style={{ ...card, padding: '16px 18px' }}><div style={{ color: '#999', fontSize: 11, fontFamily: "'DM Mono', monospace", letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 6 }}>Expenses</div><div style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Syne', sans-serif", color: '#C0392B' }}>{fmtCAD(totalExp)}</div></div>
-          <div style={{ ...card, padding: '16px 18px' }}><div style={{ color: '#999', fontSize: 11, fontFamily: "'DM Mono', monospace", letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 6 }}>Net Profit</div><div style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Syne', sans-serif", color: netProfit >= 0 ? '#3BB273' : '#C0392B' }}>{fmtCAD(netProfit)}</div></div>
-        </>}
-      </div>
-
-      {/* Overtime section */}
-      {hasOT && (
-        <div style={{ ...card, margin: '16px 16px 0', padding: '20px 24px', border: '1px solid #FDEBD0' }}>
-          <div style={{ color: '#E67E22', fontSize: 11, fontFamily: "'DM Mono', monospace", letterSpacing: 2, textTransform: 'uppercase', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ fontSize: 14 }}>!</span> Overtime Flagged
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-            <div>
-              <div style={{ color: '#aaa', fontSize: 10, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', marginBottom: 4 }}>Daily OT Days</div>
-              <div style={{ fontSize: 20, fontWeight: 700, color: '#E67E22' }}>{otDays.length}</div>
+      {ot.enabled && ot.workers.length > 0 && (
+        <section aria-label="Overtime flags" style={{ ...card, margin: '16px 16px 0', padding: '20px 24px', border: '1px solid #FDEBD0' }}>
+          <div style={{ color: '#A35A10', fontSize: 11, fontFamily: "'DM Mono', monospace", letterSpacing: 2, textTransform: 'uppercase', marginBottom: 6 }}>Overtime flags</div>
+          <div style={{ color: '#777', fontSize: 12, marginBottom: 12 }}>Per worker, BC rules (8 h/day, 12 h double, 40 h/week). Reminders only — confirm in payroll.</div>
+          {ot.workers.map(w => (
+            <div key={w.worker} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', gap: 8, flexWrap: 'wrap' }}>
+              <span style={{ color: '#333', fontSize: 13 }}>{workerName(w.worker)}</span>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {w.dailyOt > 0 && <span style={pill('#FDEBD0', '#A35A10')}>{w.dailyOt.toFixed(1)}h daily OT</span>}
+                {w.doubleTime > 0 && <span style={pill('#FADBD8', '#A93226')}>{w.doubleTime.toFixed(1)}h double</span>}
+                {w.weeklyOt > 0 && <span style={pill('#FADBD8', '#A93226')}>{w.weeklyOt.toFixed(1)}h weekly OT{w.partialWeeks ? '*' : ''}</span>}
+              </div>
             </div>
-            <div>
-              <div style={{ color: '#aaa', fontSize: 10, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', marginBottom: 4 }}>Weekly OT</div>
-              <div style={{ fontSize: 20, fontWeight: 700, color: '#E67E22' }}>{otWeeks.length} wk{otWeeks.length !== 1 ? 's' : ''}</div>
-            </div>
-          </div>
-          <div style={{ marginBottom: empOT.length > 0 ? 16 : 0 }}>
-            <div style={{ color: '#aaa', fontSize: 10, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', marginBottom: 4 }}>Total OT Hrs</div>
-            <div style={{ fontSize: 20, fontWeight: 700, color: '#C0392B' }}>{(totalDailyOT + totalWeeklyOT).toFixed(1)}</div>
-          </div>
-          {empOT.length > 0 && (
-            <div style={{ borderTop: '1px solid #f0f0f0', paddingTop: 12 }}>
-              {empOT.map(e => (
-                <div key={e.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0' }}>
-                  <span style={{ color: '#333', fontSize: 13 }}>{e.name}</span>
-                  <div style={{ display: 'flex', gap: 6 }}>
-                    {e.dailyOT > 0 && (
-                      <span style={{ background: '#FDEBD0', color: '#E67E22', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6, fontFamily: "'DM Mono', monospace" }}>
-                        {e.dailyOT.toFixed(1)}h daily
-                      </span>
-                    )}
-                    {e.weeklyOT > 0 && (
-                      <span style={{ background: '#FADBD8', color: '#C0392B', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6, fontFamily: "'DM Mono', monospace" }}>
-                        {e.weeklyOT.toFixed(1)}h weekly
-                      </span>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+          ))}
+          {ot.workers.some(w => w.partialWeeks) && <div style={{ color: '#777', fontSize: 11, marginTop: 8 }}>* Includes a week that extends beyond this period; weekly overtime is counted on the whole week.</div>}
+        </section>
       )}
 
       {bj.length > 0 && (
-        <div style={{ ...card, margin: '16px 16px 0', padding: '20px 24px' }}>
-          <div style={{ color: '#999', fontSize: 11, fontFamily: "'DM Mono', monospace", letterSpacing: 2, textTransform: 'uppercase', marginBottom: 14 }}>By Job</div>
+        <section aria-label="By job" style={{ ...card, margin: '16px 16px 0', padding: '20px 24px' }}>
+          <div style={{ color: '#666', fontSize: 11, fontFamily: "'DM Mono', monospace", letterSpacing: 2, textTransform: 'uppercase', marginBottom: 14 }}>By Job</div>
           {bj.map(j => {
-            const pct = te ? (j.e / te) * 100 : 0;
+            const pct = sum.revenueCents ? (j.revenue / sum.revenueCents) * 100 : 0;
             return (
               <div key={j.id} style={{ marginBottom: 16 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, gap: 8 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <div style={{ width: 8, height: 8, borderRadius: '50%', background: j.color }} />
                     <span style={{ color: '#333', fontSize: 13 }}>{j.name}</span>
                   </div>
-                  <div>
-                    <span style={{ color: '#111', fontSize: 13, fontWeight: 600 }}>{fmtCAD(j.e)}</span>
-                    <span style={{ color: '#bbb', fontSize: 12, marginLeft: 8 }}>{fmtDur(j.h)}</span>
+                  <div style={{ textAlign: 'right' }}>
+                    <span style={{ color: '#111', fontSize: 13, fontWeight: 600 }}>{fmtCAD(j.revenue)}</span>
+                    <span style={{ color: '#888', fontSize: 12, marginLeft: 8 }}>{fmtDur(j.h)}</span>
+                    {(j.labour > 0 || j.exp > 0) && <div style={{ color: '#777', fontSize: 11 }}>margin {fmtCAD(j.revenue - j.labour - j.exp)}</div>}
                   </div>
                 </div>
                 <div style={{ height: 4, background: '#f0f0f0', borderRadius: 2, overflow: 'hidden' }}>
@@ -169,60 +155,50 @@ export default function ReportsTab({ jobs, employees, sessions, mileage, expense
               </div>
             );
           })}
-        </div>
+        </section>
       )}
 
       {be.length > 0 && (
-        <div style={{ ...card, margin: '12px 16px 0', padding: '20px 24px' }}>
-          <div style={{ color: '#999', fontSize: 11, fontFamily: "'DM Mono', monospace", letterSpacing: 2, textTransform: 'uppercase', marginBottom: 14 }}>Crew Hours</div>
-          {be.map(e => {
-            const eOT = empOT.find(x => x.id === e.id);
-            return (
-              <div key={e.id} style={{ padding: '12px 0', borderBottom: '1px solid #f0f0f0' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Icon name="user" size={14} /></div>
-                    <div>
-                      <div style={{ color: '#333', fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
-                        {e.name}
-                        {eOT && <span style={{ background: '#FDEBD0', color: '#E67E22', fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 4 }}>OT</span>}
-                      </div>
-                      <div style={{ color: '#aaa', fontSize: 12 }}>{e.hrs.toFixed(1)} hrs · {fmtCAD(e.rate)}/hr</div>
-                    </div>
-                  </div>
-                  <div style={{ background: e.profit >= 0 ? '#eafaf1' : '#FADBD8', color: e.profit >= 0 ? '#1e8449' : '#C0392B', fontSize: 12, fontWeight: 700, padding: '3px 10px', borderRadius: 6, fontFamily: "'DM Mono', monospace" }}>
-                    {e.profit >= 0 ? '+' : ''}{fmtCAD(e.profit)}
-                  </div>
+        <section aria-label="Crew hours" style={{ ...card, margin: '12px 16px 0', padding: '20px 24px' }}>
+          <div style={{ color: '#666', fontSize: 11, fontFamily: "'DM Mono', monospace", letterSpacing: 2, textTransform: 'uppercase', marginBottom: 14 }}>Crew</div>
+          {be.map(e => (
+            <div key={e.id} style={{ padding: '12px 0', borderBottom: '1px solid #f0f0f0' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <div>
+                  <div style={{ color: '#333', fontSize: 13, fontWeight: 600 }}>{e.name}</div>
+                  <div style={{ color: '#777', fontSize: 12 }}>{e.hrs.toFixed(2)} hrs</div>
                 </div>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <div style={{ flex: 1, background: '#f8f8f8', borderRadius: 8, padding: '8px 10px' }}>
-                    <div style={{ color: '#aaa', fontSize: 10, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', marginBottom: 2 }}>Billed</div>
-                    <div style={{ color: '#111', fontSize: 13, fontWeight: 600 }}>{fmtCAD(e.billed)}</div>
-                  </div>
-                  <div style={{ flex: 1, background: '#f8f8f8', borderRadius: 8, padding: '8px 10px' }}>
-                    <div style={{ color: '#aaa', fontSize: 10, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', marginBottom: 2 }}>Labour</div>
-                    <div style={{ color: '#111', fontSize: 13, fontWeight: 600 }}>{fmtCAD(e.cost)}</div>
-                  </div>
+                <div style={{ background: e.billed - e.cost >= 0 ? '#eafaf1' : '#FADBD8', color: e.billed - e.cost >= 0 ? '#1e6b3a' : '#A93226', fontSize: 12, fontWeight: 700, padding: '3px 10px', borderRadius: 6, fontFamily: "'DM Mono', monospace" }}>
+                  {fmtCAD(e.billed - e.cost)} after wage
                 </div>
               </div>
-            );
-          })}
-        </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <div style={miniBox}><div style={miniLbl}>Billed to customers</div><div style={miniVal}>{fmtCAD(e.billed)}</div></div>
+                <div style={miniBox}><div style={miniLbl}>Wages</div><div style={miniVal}>{fmtCAD(e.cost)}</div></div>
+              </div>
+            </div>
+          ))}
+        </section>
       )}
 
-      {f.length === 0 && <div style={{ textAlign: 'center', padding: '40px 0', color: '#bbb' }}>No sessions in this period</div>}
+      {f.length === 0 && <div style={{ textAlign: 'center', padding: '40px 0', color: '#888' }}>No completed sessions in this period</div>}
 
-      {f.length > 0 && (
-        <div style={{ padding: '16px 16px 0', display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <button onClick={() => setShowInvoice(true)}
-            style={{ width: '100%', padding: '14px', borderRadius: 12, border: 'none', background: accent, color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontFamily: "'Syne', sans-serif" }}>
-            <Icon name="invoice" size={16} /> Invoice &amp; Mark as Billed
-          </button>
-          <button onClick={exportCSV} style={{ width: '100%', padding: '12px', borderRadius: 12, border: '1px solid #e0e0e0', background: '#fff', color: '#888', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+      <div style={{ padding: '16px 16px 0', display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <button type="button" onClick={() => setShowInvoice(true)}
+          style={{ width: '100%', padding: '14px', borderRadius: 12, border: 'none', background: accent, color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontFamily: "'Syne', sans-serif" }}>
+          <Icon name="invoice" size={16} /> Record QuickBooks Invoice &amp; Mark Billed
+        </button>
+        {f.length > 0 && (
+          <button type="button" onClick={exportCSV} style={{ width: '100%', padding: '12px', borderRadius: 12, border: '1px solid #ddd', background: '#fff', color: '#555', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
             <Icon name="dl" size={14} /> Export CSV
           </button>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
+
+const pill = (bg, color) => ({ background: bg, color, fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6, fontFamily: "'DM Mono', monospace" });
+const miniBox = { flex: 1, background: '#f8f8f8', borderRadius: 8, padding: '8px 10px' };
+const miniLbl = { color: '#666', fontSize: 10, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', marginBottom: 2 };
+const miniVal = { color: '#111', fontSize: 13, fontWeight: 600 };
