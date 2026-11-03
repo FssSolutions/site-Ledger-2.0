@@ -42,7 +42,16 @@ What it changes that affects access:
   Supabase CLI, so apply the new migration by running the file (do not use
   `supabase db push`, which would try to re-run the older files).
 
-## Rollout order (production actions — awaiting approval)
+## Applied to production
+
+`20261103120000_security_and_sync_hardening.sql` was applied on 2026-11-03
+through the SQL editor (wrapped in `begin; … commit;`). Post-checks:
+schema version 2, 35 owner-only policies, 0 old policies, 0 anon grants,
+`expenses.category` present, RLS on `invoice_lines` and `voice_usage`,
+90 sessions and 3 invoices kept. Still open: the Oct 25 backfill cleanup
+for other accounts (owner's decision) and deploying the new voice function.
+
+## Rollout order
 
 1. **Back up.** Supabase Dashboard → Database → Backups (confirm a recent
    backup or PITR point), or `pg_dump --schema=public --data-only` of the
