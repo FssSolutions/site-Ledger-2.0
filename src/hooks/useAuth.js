@@ -76,10 +76,12 @@ export function useAuth() {
       return;
     }
     const lost = expired || userRef.current;
+    // The SIGNED_OUT event may have arrived first and already explained why;
+    // never replace that explanation with nothing.
     setState(s => ({
       status: 'signed-out',
       user: null,
-      notice: s.notice?.kind === 'link-error' ? s.notice : lost ? { kind: 'expired', email: lost.email } : null,
+      notice: ['link-error', 'expired'].includes(s.notice?.kind) ? s.notice : lost ? { kind: 'expired', email: lost.email } : null,
     }));
   }, [migrateLegacySession]);
 

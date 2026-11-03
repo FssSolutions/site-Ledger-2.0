@@ -255,6 +255,16 @@ describe('failure handling', () => {
     expect((await a.loadAll()).data.jobs.find(x => x.id === j.id)).toBeUndefined();
   });
 
+  it('deleting a record whose creation the server refused removes it cleanly', async () => {
+    const a = storeFor(A);
+    const j = await a.create('jobs', { name: 'J', rate: 1 });
+    server.fault('reject');
+    await engineFor(a).sync();
+    await a.remove('jobs', j.id);
+    expect(await a.listOps()).toEqual([]);
+    expect((await a.loadAll()).data.jobs).toEqual([]);
+  });
+
   it('backoff is bounded', () => {
     expect(backoffDelay(1, () => 1)).toBe(2000);
     expect(backoffDelay(50, () => 1)).toBe(5 * 60 * 1000);

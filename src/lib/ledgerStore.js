@@ -133,7 +133,12 @@ export function createLedgerStore(db, uid, { now = () => Date.now(), onChange = 
         const rec = await reqP(records.get([uid, table, id]));
         if (!rec) return;
         const ops = await recordOps(outbox, table, id);
-        const neverSent = ops.length > 0 && ops[0].kind === 'insert' && ops.every(o => o.attempts === 0);
+        // Not on the server: never sent, or its creation was refused by the
+        // server (a 4xx response means it was not stored; later ops for the
+        // record were held back behind it and never sent).
+        const neverSent = ops.length > 0 && ops[0].kind === 'insert'
+          && (ops[0].attempts === 0 || ops[0].status === 'error')
+          && ops.slice(1).every(o => o.attempts === 0);
         if (neverSent) {
           // Never reached the server: forget it entirely.
           for (const o of ops) outbox.delete(o.opId);
