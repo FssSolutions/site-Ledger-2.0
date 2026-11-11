@@ -14,6 +14,7 @@ import CalendarTab from './pages/CalendarTab.jsx';
 import { useWindowWidth } from './hooks/useWindowWidth.js';
 import { useAuth } from './hooks/useAuth.js';
 import { useLedger } from './hooks/useLedger.js';
+import { readQboReturn, clearQboReturn, qboReturnMessage } from './lib/qboApi.js';
 import { usePrefs } from './hooks/usePrefs.js';
 import AccentColorContext from './lib/AccentColorContext.js';
 import SettingsModal from './components/SettingsModal.jsx';
@@ -62,7 +63,9 @@ export default function App() {
   const online = useOnlineHint();
   const user = auth.status === 'signed-in' || auth.status === 'offline' ? auth.user : null;
   const ledger = useLedger(user, { online });
-  const [tab, setTab] = useState(() => { try { return localStorage.getItem('sl_default_tab') || 'home'; } catch { return 'home'; } });
+  // Set when the browser has just come back from Intuit's QuickBooks sign-in.
+  const [qboReturn] = useState(readQboReturn);
+  const [tab, setTab] = useState(() => { if (qboReturn) return 'company'; try { return localStorage.getItem('sl_default_tab') || 'home'; } catch { return 'home'; } });
   const [showMore, setShowMore] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showPending, setShowPending] = useState(false);
@@ -83,6 +86,13 @@ export default function App() {
   useEffect(() => {
     if (auth.notice?.kind === 'password-updated') { toast('Password updated.', 'success'); auth.dismissNotice(); }
   }, [auth.notice]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    const m = qboReturnMessage(qboReturn);
+    if (!m) return;
+    toast(m.message, m.type);
+    clearQboReturn();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Reminder: only fires while the app is open (see Settings).
   const reminderFired = useRef('');
@@ -176,7 +186,8 @@ export default function App() {
         onAddEmp={e => run(a.addEmployee(e))} onUpdateEmp={e => run(a.updateEmployee(e))} onDeleteEmp={id => run(a.deleteEmployee(id))}
         onAddCust={c => run(a.addCustomer(c))} onUpdateCust={c => run(a.updateCustomer(c))} onDeleteCust={id => run(a.deleteCustomer(id))}
         onSetInvoiceStatus={(id, st) => run(ledger.setInvoiceStatus(id, st))} onDeleteInvoice={id => run(ledger.deleteInvoice(id), 'Invoice deleted; its hours are unbilled again.')}
-        onUpdateCompany={d => run(a.saveCompany(d), 'Company info saved on this device.')} taxRate={prefs.taxRate} />}
+        onUpdateCompany={d => run(a.saveCompany(d), 'Company info saved on this device.')} taxRate={prefs.taxRate}
+        ledger={ledger} uid={user.uid} online={online} toast={toast} initialView={qboReturn ? 'profile' : undefined} />}
     </Suspense>
   );
 

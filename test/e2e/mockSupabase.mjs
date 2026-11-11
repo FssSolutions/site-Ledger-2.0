@@ -107,6 +107,7 @@ export function startMock({ port = 54321, tokenTtl = 3600 } = {}) {
     const name = url.pathname.slice('/rest/v1/'.length);
 
     if (name === 'rpc/ledger_schema_version') return send(res, 200, 2);
+    if (name === 'rpc/qbo_status') return send(res, 200, { connected: false });
     if (name === 'rpc/record_invoice') {
       const { p_invoice: inv, p_session_ids: ids, p_lines: lines } = body;
       if (t('invoices').has(inv.id)) return send(res, 200, { invoice: t('invoices').get(inv.id), lines: [...t('invoice_lines').values()].filter(l => l.invoice_id === inv.id), replayed: true });

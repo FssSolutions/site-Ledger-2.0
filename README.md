@@ -60,9 +60,23 @@ lost or shared phone), what sign-out removes, and residual risks.
 
 ## QuickBooks
 
-SiteLedger does **not** create, send or update QuickBooks invoices. You create
-the invoice in QuickBooks, then use **Record QuickBooks Invoice** to mark the
-matching hours as billed here, so they are not billed twice.
+SiteLedger does **not** create, send or update QuickBooks invoices yet. You
+create the invoice in QuickBooks, then use **Record QuickBooks Invoice** to
+mark the matching hours as billed here, so they are not billed twice.
+
+Creating invoices in QuickBooks directly is being built in stages
+([docs/QUICKBOOKS_PLAN.md](docs/QUICKBOOKS_PLAN.md)). The first stage is in:
+**Company → Profile → Connect QuickBooks** links a QuickBooks Online company
+to the account. Connecting does not change anything in QuickBooks.
+
+Server setup for the connection (Edge Function secrets, never `VITE_*`):
+`QBO_CLIENT_ID`, `QBO_CLIENT_SECRET` (from the Intuit developer app),
+`QBO_ENV` (`sandbox` or `production`), `QBO_REDIRECT_URI`
+(`https://<project-ref>.supabase.co/functions/v1/qbo-callback`, also entered
+in the Intuit app), `QBO_TOKEN_KEY` (32 random bytes, base64) and `APP_URL`
+(where the app is hosted). Apply
+`supabase/migrations/20261111120000_quickbooks_connection.sql`, then deploy
+`qbo-connect` and `qbo-callback`.
 
 ## Reminders
 

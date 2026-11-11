@@ -18,12 +18,35 @@
   and commits or rolls back as a unit.
 - Issued invoices cannot be edited except for paid/unpaid status; invoice
   lines cannot be updated or deleted directly.
-- `consume_voice_quota()` is the only SECURITY DEFINER function. It acts only
-  on `auth.uid()`, has `search_path = ''`, and is executable by
-  `authenticated` only.
+- `consume_voice_quota()` and `qbo_status()` are the only SECURITY DEFINER
+  functions. Each acts only on `auth.uid()`, has `search_path = ''`, and is
+  executable by `authenticated` only.
 - Frontend `user_id` values are never trusted; they are checked by RLS.
-- Secrets: only the public anon key is in the browser. The OpenAI key lives in
-  Edge Function secrets. The service-role key is not used by the app.
+- Secrets: only the public anon key is in the browser. The OpenAI key and the
+  QuickBooks client secret live in Edge Function secrets.
+- The service-role key is used in exactly one place: the `qbo-connect` and
+  `qbo-callback` Edge Functions, and only to read and write the two
+  `qbo_*` tables. The browser app never has it.
+
+### QuickBooks connection
+
+- QuickBooks tokens can read and write the user's books. They are stored in
+  `qbo_connections`, encrypted with AES-GCM under a key held only in Edge
+  Function secrets (`QBO_TOKEN_KEY`) and bound to the owning account id, so
+  a database dump alone does not reveal them. Losing or changing that key
+  makes stored connections unreadable; users would reconnect.
+- `qbo_connections` and `qbo_oauth_states` have RLS on with no policies and
+  no privileges for `anon` or `authenticated`: app users cannot read or
+  write them, not even their own row. The app reads only `qbo_status()`
+  (SECURITY DEFINER, acts on `auth.uid()`, returns no tokens and no
+  QuickBooks company id).
+- `qbo-callback` runs without a Supabase token because it is a browser
+  redirect from Intuit. It is tied to an account by a random, single-use
+  `state` created for the signed-in user by `qbo-connect`: stored only as a
+  SHA-256 hash, valid for 10 minutes, deleted when used. The redirect back
+  to the app carries only a result code.
+- One QuickBooks company can be connected to one SiteLedger account.
+- Disconnect revokes the tokens at Intuit (best effort) and deletes them.
 
 Verified with local two-account tests (`npm run test:db`). **Live verification
 against production is outstanding** — see "Not yet verified" below.

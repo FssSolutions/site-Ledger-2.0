@@ -1,6 +1,12 @@
 # QuickBooks Online integration plan
 
-Status: plan only, nothing implemented. Written 2026-11-03.
+Status: phase 1 in progress. Written 2026-11-03.
+
+Done so far (2026-11-11): connect / disconnect. Migration
+`20261111120000_quickbooks_connection.sql`, Edge Functions `qbo-connect` and
+`qbo-callback`, and the **Connect QuickBooks** card under Company → Profile.
+The invoice columns, the single `qbo` function and the schema-version bump
+described below come with the invoice step.
 
 ## Goal
 

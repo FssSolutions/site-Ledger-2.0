@@ -60,4 +60,4 @@ jobs:
       - uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
-      - run: deno check supabase/functions/voice-entry/index.ts
+      - run: deno check supabase/functions/voice-entry/index.ts supabase/functions/qbo-connect/index.ts supabase/functions/qbo-callback/index.ts
