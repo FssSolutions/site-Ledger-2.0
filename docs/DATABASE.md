@@ -7,6 +7,7 @@
 | `20260721194037_fixed_price_jobs.sql` | existing | Fixed-price columns |
 | `20261102120000_session_billing.sql` | existing, **edited** | `sessions.invoice_id`. The all-accounts historical backfill was removed from this file (see below). |
 | `20261103120000_security_and_sync_hardening.sql` | **new** | RLS, ownership checks, versions, break/snapshot columns, `invoice_lines`, `record_invoice()`, voice quota |
+| `20261111120000_quickbooks_connection.sql` | **new, not yet applied** | `qbo_connections` and `qbo_oauth_states` (no access for app users), `qbo_status()`. Additive; changes no existing table and does not bump the schema version, so it can be applied before or after the frontend. |
 
 The new migration is additive. It deletes no rows and rewrites no existing
 values (new columns get defaults). New CHECK constraints are `NOT VALID`:

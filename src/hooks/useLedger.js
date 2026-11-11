@@ -201,6 +201,19 @@ export function useLedger(user, { online = true } = {}) {
     return { ok: true };
   }), [withCtx]);
 
+  // QuickBooks connection status (never tokens). `unavailable` means the
+  // server does not have the QuickBooks update yet.
+  const qboStatus = useCallback(() => withCtx(async c => {
+    const r = await c.remote.rpc('qbo_status');
+    if (r.ok) return { ok: true, data: r.data };
+    return {
+      ok: false,
+      error: r.error.message,
+      offline: r.error.kind === 'network' || r.error.kind === 'aborted',
+      unavailable: r.error.code === 'PGRST202' || r.error.status === 404,
+    };
+  }), [withCtx]);
+
   // ---- outbox management --------------------------------------------------
   const retryOp = useCallback(opId => withCtx(async c => { await c.store.retry(opId); c.engine.sync(); return { ok: true }; }), [withCtx]);
   const discardOp = useCallback(opId => withCtx(async c => { await c.store.discard(opId); return { ok: true }; }), [withCtx]);
@@ -231,7 +244,7 @@ export function useLedger(user, { online = true } = {}) {
     legacy: state.legacy,
     online,
     actions,
-    recordInvoice, setInvoiceStatus, deleteInvoice,
+    recordInvoice, setInvoiceStatus, deleteInvoice, qboStatus,
     retryOp, discardOp, resolveConflict, syncNow, prepareSignOut,
     getStore: () => (ctx.current?.uid === uid ? ctx.current.store : null),
   };

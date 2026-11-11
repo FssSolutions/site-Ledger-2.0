@@ -1,2 +1,10 @@
 [functions.voice-entry]
 verify_jwt = true
+
+[functions.qbo-connect]
+verify_jwt = true
+
+# Browser redirect from Intuit: there is no Supabase token. The request is
+# tied to an account by a single-use state (see the function's header).
+[functions.qbo-callback]
+verify_jwt = false
