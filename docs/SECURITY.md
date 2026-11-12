@@ -25,7 +25,8 @@
 - Secrets: only the public anon key is in the browser. The OpenAI key and the
   QuickBooks client secret live in Edge Function secrets.
 - The service-role key is used in exactly one place: the `qbo-connect`,
-  `qbo-callback` and `qbo` Edge Functions, and only to read and write the two
+  `qbo-callback` and `qbo` Edge Functions (for the `qbo_*` tables, and for
+  the `qbo_*` columns of `invoices` described below), and only to read and write the two
   `qbo_*` tables. The browser app never has it.
 
 ### QuickBooks connection
@@ -46,6 +47,18 @@
   SHA-256 hash, valid for 10 minutes, deleted when used. The redirect back
   to the app carries only a result code.
 - One QuickBooks company can be connected to one SiteLedger account.
+- Creating an invoice: the `qbo` function calls `record_invoice()` with the
+  CALLER's token, so every existing ownership and double-billing check
+  applies unchanged, and reads the invoice, lines and customer with the
+  caller's token too (RLS decides what is visible). Only then does it use
+  the service role, and only to write the `qbo_*` columns of that invoice
+  and the customer link. A trigger rejects any change to `qbo_*` columns by
+  app users, and the QuickBooks invoice id cannot be changed once set, by
+  anyone. Recorded invoice amounts stay immutable; QuickBooks' totals are
+  stored beside them.
+- Data sent to QuickBooks for an invoice: the customer's name, email, phone
+  and address (when the customer is first added there), and per line the
+  date, job name, worker name, quantity and rate.
 - Disconnect revokes the tokens at Intuit (best effort) and deletes them.
 
 Verified with local two-account tests (`npm run test:db`). **Live verification

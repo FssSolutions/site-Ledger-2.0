@@ -9,8 +9,25 @@ Also done: invoice setup. The `qbo` Edge Function (`options`,
 `save-settings`) reads service items and sales tax codes from the connected
 company, refreshes expired access automatically, and the card lets the user
 choose the labour item, optional half/full-day items and the tax code.
-The invoice columns, the remaining `qbo` actions and the schema-version bump
-described below come with the invoice step.
+Also done (2026-11-12): invoice creation. Migration
+`20261112120000_quickbooks_invoices.sql`; `qbo` actions `create-invoice` and
+`retry-invoice`; the invoice screen creates the invoice in QuickBooks when
+the account is connected and set up; the invoice list shows the QuickBooks
+number or *Not in QuickBooks yet* with Retry.
+
+Differences from the plan as first written:
+- Customer links live in their own table (`qbo_customer_links`, per
+  QuickBooks company) instead of a column on `customers`, so linking never
+  changes a customer row or conflicts with an offline edit.
+- No schema-version bump: the app reads `invoices_ready` from `qbo_status()`
+  instead, so rollout order does not matter.
+- The request id sent to QuickBooks is `<invoice id>-<n>`, where `n` only
+  increases after QuickBooks definitely refused a request.
+- Deleting a linked invoice is allowed, with a warning that the QuickBooks
+  invoice must be voided there. Blocking it needs the void sync (phase 2).
+
+Still to do in phase 1: customer import, QuickBooks PDF, email via
+QuickBooks. Phase 2 (paid status, voids) is unchanged.
 
 ## Goal
 

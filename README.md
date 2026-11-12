@@ -60,14 +60,22 @@ lost or shared phone), what sign-out removes, and residual risks.
 
 ## QuickBooks
 
-SiteLedger does **not** create, send or update QuickBooks invoices yet. You
-create the invoice in QuickBooks, then use **Record QuickBooks Invoice** to
-mark the matching hours as billed here, so they are not billed twice.
+Two ways to bill hours, depending on the account:
 
-Creating invoices in QuickBooks directly is being built in stages
-([docs/QUICKBOOKS_PLAN.md](docs/QUICKBOOKS_PLAN.md)). The first stage is in:
-**Company → Profile → Connect QuickBooks** links a QuickBooks Online company
-to the account. Connecting does not change anything in QuickBooks.
+- **QuickBooks connected and set up** (Company → Profile → Connect
+  QuickBooks, then *Set up invoices*): the invoice screen creates the invoice
+  in QuickBooks Online and marks the hours billed in one step. The hours are
+  recorded first; if QuickBooks cannot be reached, the invoice shows as
+  *Not in QuickBooks yet* with a **Retry** button, and retrying never creates
+  a second invoice. QuickBooks numbers the invoice and calculates the tax.
+- **Not connected** (or "record it by hand"): you create the invoice in
+  QuickBooks yourself, then record it here so the hours are not billed twice.
+  Nothing is sent to QuickBooks.
+
+Not built yet: paid status from QuickBooks (still a manual toggle), voiding,
+emailing and PDFs from QuickBooks. See
+[docs/QUICKBOOKS_PLAN.md](docs/QUICKBOOKS_PLAN.md). Deleting an invoice record
+here does not delete the QuickBooks invoice.
 
 Server setup for the connection (Edge Function secrets, never `VITE_*`):
 `QBO_CLIENT_ID`, `QBO_CLIENT_SECRET` (from the Intuit developer app),
@@ -75,8 +83,9 @@ Server setup for the connection (Edge Function secrets, never `VITE_*`):
 (`https://<project-ref>.supabase.co/functions/v1/qbo-callback`, also entered
 in the Intuit app), `QBO_TOKEN_KEY` (32 random bytes, base64) and `APP_URL`
 (where the app is hosted). Apply
-`supabase/migrations/20261111120000_quickbooks_connection.sql`, then deploy
-`qbo-connect`, `qbo-callback` and `qbo`.
+`supabase/migrations/20261111120000_quickbooks_connection.sql` and
+`20261112120000_quickbooks_invoices.sql`, then deploy `qbo-connect`,
+`qbo-callback` and `qbo`.
 
 ## Reminders
 

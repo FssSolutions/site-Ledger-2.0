@@ -8,7 +8,7 @@ const INTUIT_SIGN_IN = 'https://appcenter.intuit.com/';
 
 // Calls one of the QuickBooks Edge Functions. On failure, `code` is set when
 // the server says what to do next: 'reconnect' or 'not_connected'.
-async function callQbo(fn, uid, body) {
+async function callQbo(fn, uid, body, timeoutMs = TIMEOUT_MS) {
   let token;
   try { token = await accessTokenFor(uid); } catch { return { ok: false, error: 'QuickBooks needs internet and a signed-in session.' }; }
   try {
@@ -16,16 +16,17 @@ async function callQbo(fn, uid, body) {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, apikey: import.meta.env.VITE_SUPABASE_ANON_KEY, 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(TIMEOUT_MS),
+      signal: AbortSignal.timeout(timeoutMs),
     });
     const data = await r.json().catch(() => null);
     if (r.status === 401) return { ok: false, error: 'Your session expired. Sign in again to use QuickBooks.' };
     if (r.status === 404) return { ok: false, error: 'QuickBooks is not set up on the server yet.' };
-    if (!r.ok) return { ok: false, error: data?.error || 'QuickBooks is temporarily unavailable. Try again.', code: data?.code || null };
+    // `uncertain`: the request may have been carried out even though it failed here.
+    if (!r.ok) return { ok: false, error: data?.error || 'QuickBooks is temporarily unavailable. Try again.', code: data?.code || null, uncertain: r.status >= 500 };
     return { ok: true, data };
   } catch (e) {
-    if (e?.name === 'TimeoutError') return { ok: false, error: 'QuickBooks took too long to respond. Try again.' };
-    return { ok: false, error: 'No connection. QuickBooks needs internet.' };
+    if (e?.name === 'TimeoutError') return { ok: false, error: 'QuickBooks took too long to respond. Try again.', uncertain: true };
+    return { ok: false, error: 'No connection. QuickBooks needs internet.', uncertain: true };
   }
 }
 
@@ -34,6 +35,43 @@ async function callQbo(fn, uid, body) {
 export const loadQboOptions = uid => callQbo('qbo', uid, { action: 'options' });
 
 export const saveQboSettings = (uid, settings) => callQbo('qbo', uid, { action: 'save-settings', settings });
+
+const INVOICE_TIMEOUT_MS = 60000;
+
+// Records the invoice (marks the hours billed) and creates it in QuickBooks.
+// ok means the hours ARE recorded; data.qbo.ok says whether QuickBooks has it.
+// Repeating the same request (same invoice id) is safe.
+export const createQboInvoice = (uid, invoice, sessionIds, lines) =>
+  callQbo('qbo', uid, { action: 'create-invoice', invoice, session_ids: sessionIds, lines }, INVOICE_TIMEOUT_MS);
+
+// Sends an already-recorded invoice to QuickBooks again.
+export const retryQboInvoice = (uid, invoiceId) => callQbo('qbo', uid, { action: 'retry-invoice', invoice_id: invoiceId }, INVOICE_TIMEOUT_MS);
+
+// Can this account create invoices in QuickBooks right now? `status` is the
+// qbo_status() result.
+export function qboInvoiceMode(status) {
+  if (!status?.connected || !status.invoices_ready) return 'off';
+  if (status.status !== 'connected') return 'reconnect';
+  return status.setup_complete ? 'ready' : 'setup';
+}
+
+// How an invoice relates to QuickBooks, for display.
+//   manual  – recorded by hand        created – in QuickBooks
+//   unsent  – recorded here, not in QuickBooks yet (can be retried)
+export function qboInvoiceState(inv) {
+  if (!inv?.qbo_status) return 'manual';
+  if (inv.qbo_invoice_id || inv.qbo_status === 'created') return 'created';
+  if (inv.qbo_status === 'pending' || inv.qbo_status === 'failed') return 'unsent';
+  return inv.qbo_status;
+}
+
+// "QuickBooks #1042", or the hand-typed number for invoices recorded by hand.
+export function invoiceTitle(inv) {
+  const state = qboInvoiceState(inv);
+  if (state === 'manual') return inv?.notes || '—';
+  if (state === 'unsent') return 'Not in QuickBooks yet';
+  return inv.qbo_doc_number ? `QuickBooks #${inv.qbo_doc_number}` : 'QuickBooks invoice';
+}
 
 // Returns the Intuit sign-in URL to send the browser to.
 export async function startQboConnect(uid) {
