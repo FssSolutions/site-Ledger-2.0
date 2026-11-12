@@ -3,6 +3,7 @@ import { card } from '../styles.js';
 import { useAccentColor } from '../lib/AccentColorContext.js';
 import { startQboConnect, disconnectQbo } from '../lib/qboApi.js';
 import QuickBooksSetup from './QuickBooksSetup.jsx';
+import { SUPPORT_EMAIL } from '../lib/constants.js';
 
 const heading = { color: '#999', fontSize: 11, fontFamily: "'DM Mono', monospace", letterSpacing: 2, textTransform: 'uppercase', marginBottom: 12 };
 const note = { color: '#777', fontSize: 12, lineHeight: 1.5 };
@@ -126,6 +127,11 @@ export default function QuickBooksCard({ ledger, uid, online, toast, taxRate }) 
           ))}
           <button type="button" onClick={disconnect} disabled={busy} style={secondary}>Disconnect</button>
         </>
+      )}
+      {st.phase !== 'loading' && (
+        <div style={{ ...note, fontSize: 11, marginTop: 14 }}>
+          Trouble with QuickBooks? Email <a href={`mailto:${SUPPORT_EMAIL}?subject=SiteLedger%20QuickBooks%20support`} style={{ color: accent }}>{SUPPORT_EMAIL}</a>.
+        </div>
       )}
     </section>
   );

@@ -45,3 +45,15 @@ describe('tax code label', () => {
     expect(taxCodeLabel(null)).toBe('');
   });
 });
+
+describe('sign-in address check', () => {
+  it('only allows https addresses on intuit.com', async () => {
+    const { isIntuitUrl } = await import('../src/lib/qboApi.js');
+    expect(isIntuitUrl('https://appcenter.intuit.com/connect/oauth2?client_id=x')).toBe(true);
+    expect(isIntuitUrl('http://appcenter.intuit.com/connect/oauth2')).toBe(false);
+    expect(isIntuitUrl('https://appcenter.intuit.com.evil.example/')).toBe(false);
+    expect(isIntuitUrl('https://evil.example/?x=https://appcenter.intuit.com/')).toBe(false);
+    expect(isIntuitUrl('javascript:alert(1)')).toBe(false);
+    expect(isIntuitUrl(null)).toBe(false);
+  });
+});

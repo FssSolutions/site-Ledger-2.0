@@ -22,6 +22,14 @@ export const INTUIT = {
   },
 } as const;
 
+// Intuit's discovery documents list the current OAuth addresses. They are
+// read at run time (see oauthEndpoints); the addresses in INTUIT above are
+// only the fallback when a document cannot be fetched.
+export const DISCOVERY = {
+  sandbox: 'https://developer.api.intuit.com/.well-known/openid_sandbox_configuration',
+  production: 'https://developer.api.intuit.com/.well-known/openid_configuration',
+} as const;
+
 export const SCOPE = 'com.intuit.quickbooks.accounting';
 export const MINOR_VERSION = '75';
 export const STATE_TTL_MS = 10 * 60 * 1000;
@@ -86,6 +94,65 @@ export function readConfig(get: (name: string) => string | undefined): ConfigRes
   };
 }
 
+// ---- Intuit OAuth addresses and error logging --------------------------------
+
+export interface OAuthEndpoints { authorize: string; token: string; revoke: string }
+
+function isIntuitUrl(v: unknown): v is string {
+  try {
+    const u = new URL(v as string);
+    return u.protocol === 'https:' && (u.hostname === 'intuit.com' || u.hostname.endsWith('.intuit.com'));
+  } catch {
+    return false;
+  }
+}
+
+// Accepts a discovery document only if every address is an https Intuit one.
+export function parseDiscovery(doc: unknown): OAuthEndpoints | null {
+  const d = doc as Record<string, unknown> | null;
+  if (!d || !isIntuitUrl(d.authorization_endpoint) || !isIntuitUrl(d.token_endpoint) || !isIntuitUrl(d.revocation_endpoint)) return null;
+  return { authorize: d.authorization_endpoint, token: d.token_endpoint, revoke: d.revocation_endpoint };
+}
+
+const ENDPOINT_TTL_MS = 6 * 60 * 60 * 1000;
+const endpointCache = new Map<string, { at: number; value: OAuthEndpoints }>();
+
+// Current OAuth addresses from Intuit's discovery document, cached for a few
+// hours. Falls back to the known addresses if the document is unavailable.
+export async function oauthEndpoints(cfg: Pick<QboConfig, 'env'>): Promise<OAuthEndpoints> {
+  const hit = endpointCache.get(cfg.env);
+  if (hit && Date.now() - hit.at < ENDPOINT_TTL_MS) return hit.value;
+  try {
+    const r = await fetch(DISCOVERY[cfg.env], { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(4000) });
+    if (r.ok) {
+      const parsed = parseDiscovery(await r.json());
+      if (parsed) {
+        endpointCache.set(cfg.env, { at: Date.now(), value: parsed });
+        return parsed;
+      }
+    } else {
+      await r.body?.cancel();
+    }
+  } catch { /* fall back below */ }
+  return { authorize: INTUIT.authorize, token: INTUIT.token, revoke: INTUIT.revoke };
+}
+
+// Intuit's id for one request (the intuit_tid response header). Intuit
+// support uses it to find the request on their side.
+export function intuitTid(r: Response) {
+  const t = r.headers.get('intuit_tid');
+  return t && /^[\w-]{1,80}$/.test(t) ? t : null;
+}
+
+// One log line per failed QuickBooks request, for troubleshooting with Intuit
+// support. Holds only the kind of request, the HTTP status, Intuit's request
+// id and error codes: never tokens, query text, names or amounts.
+export function logQboError(where: string, r: Response, extra: Record<string, unknown> = {}) {
+  console.error(JSON.stringify({ source: 'quickbooks', where, status: r.status, intuit_tid: intuitTid(r), ...extra }));
+}
+
+const errorCode = (v: unknown) => (typeof v === 'string' && /^[\w.-]{1,60}$/.test(v) ? v : null);
+
 // ---- encoding ---------------------------------------------------------------
 
 export function b64encode(bytes: Uint8Array) {
@@ -141,8 +208,8 @@ export async function hashState(state: string) {
   return Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('');
 }
 
-export function authorizeUrl(cfg: Pick<QboConfig, 'clientId' | 'redirectUri'>, state: string) {
-  const u = new URL(INTUIT.authorize);
+export function authorizeUrl(cfg: Pick<QboConfig, 'clientId' | 'redirectUri'>, state: string, endpoint: string = INTUIT.authorize) {
+  const u = new URL(endpoint);
   u.searchParams.set('client_id', cfg.clientId);
   u.searchParams.set('response_type', 'code');
   u.searchParams.set('scope', SCOPE);
@@ -193,25 +260,28 @@ export function parseTokenResponse(data: unknown, nowMs: number): TokenSet | nul
 const basicAuth = (cfg: QboConfig) => `Basic ${btoa(`${cfg.clientId}:${cfg.clientSecret}`)}`;
 
 export async function exchangeCode(cfg: QboConfig, code: string): Promise<TokenSet | null> {
-  const r = await fetch(INTUIT.token, {
+  const r = await fetch((await oauthEndpoints(cfg)).token, {
     method: 'POST',
     headers: { Authorization: basicAuth(cfg), Accept: 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({ grant_type: 'authorization_code', code, redirect_uri: cfg.redirectUri }),
     signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
   });
-  if (!r.ok) return null;
-  return parseTokenResponse(await r.json().catch(() => null), Date.now());
+  const data = await r.json().catch(() => null);
+  if (!r.ok) { logQboError('oauth:exchange', r, { error: errorCode(data?.error) }); return null; }
+  return parseTokenResponse(data, Date.now());
 }
 
 // Ends the connection at Intuit. Best effort: returns false on any failure.
 export async function revokeToken(cfg: QboConfig, token: string) {
   try {
-    const r = await fetch(INTUIT.revoke, {
+    const r = await fetch((await oauthEndpoints(cfg)).revoke, {
       method: 'POST',
       headers: { Authorization: basicAuth(cfg), Accept: 'application/json', 'Content-Type': 'application/json' },
       body: JSON.stringify({ token }),
       signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
     });
+    if (!r.ok) logQboError('oauth:revoke', r);
+    await r.body?.cancel();
     return r.ok;
   } catch {
     return false;
@@ -225,7 +295,7 @@ export async function fetchCompanyInfo(cfg: QboConfig, realmId: string, accessTo
       headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' },
       signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
     });
-    if (!r.ok) return null;
+    if (!r.ok) { logQboError('companyinfo', r); await r.body?.cancel(); return null; }
     const info = (await r.json())?.CompanyInfo;
     const text = (x: unknown) => (typeof x === 'string' && x.trim() ? x.trim().slice(0, 200) : null);
     return { name: text(info?.CompanyName), country: text(info?.Country) };
@@ -308,7 +378,7 @@ type RefreshResult = { ok: true; tokens: TokenSet } | { ok: false; revoked: bool
 export async function refreshTokens(cfg: QboConfig, refreshToken: string): Promise<RefreshResult> {
   let r: Response;
   try {
-    r = await fetch(INTUIT.token, {
+    r = await fetch((await oauthEndpoints(cfg)).token, {
       method: 'POST',
       headers: { Authorization: basicAuth(cfg), Accept: 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: refreshToken }),
@@ -318,7 +388,10 @@ export async function refreshTokens(cfg: QboConfig, refreshToken: string): Promi
     return { ok: false, revoked: false };
   }
   const data = await r.json().catch(() => null);
-  if (!r.ok) return { ok: false, revoked: r.status === 400 && data?.error === 'invalid_grant' };
+  if (!r.ok) {
+    logQboError('oauth:refresh', r, { error: errorCode(data?.error) });
+    return { ok: false, revoked: r.status === 400 && data?.error === 'invalid_grant' };
+  }
   const tokens = parseTokenResponse(data, Date.now());
   return tokens ? { ok: true, tokens } : { ok: false, revoked: false };
 }
@@ -417,7 +490,12 @@ export async function qboFetch(cfg: QboConfig, conn: Connection, path: string, i
   let r: Response;
   const used = conn.accessToken;
   try { r = await send(used); } catch { throw new QboError('unavailable'); }
-  if (r.status !== 401) return r;
+  if (r.status !== 401) {
+    // Kind of request only (e.g. "api:invoice"); the query text is never logged.
+    if (!r.ok) logQboError(`api:${path.split('?')[0]}`, r);
+    return r;
+  }
+  logQboError(`api:${path.split('?')[0]}`, r, { retried: true });
   await r.body?.cancel();
   // Refresh once, even when several requests were rejected at the same time.
   if (conn.accessToken === used) {
@@ -428,10 +506,12 @@ export async function qboFetch(cfg: QboConfig, conn: Connection, path: string, i
   if (conn.refreshing) await conn.refreshing;
   try { r = await send(conn.accessToken); } catch { throw new QboError('unavailable'); }
   if (r.status === 401) {
+    logQboError(`api:${path.split('?')[0]}`, r);
     await r.body?.cancel();
     await markNeedsReconnect(cfg, conn.userId);
     throw new QboError('reconnect');
   }
+  if (!r.ok) logQboError(`api:${path.split('?')[0]}`, r);
   return r;
 }
 
