@@ -186,6 +186,7 @@ export default function App() {
         onAddEmp={e => run(a.addEmployee(e))} onUpdateEmp={e => run(a.updateEmployee(e))} onDeleteEmp={id => run(a.deleteEmployee(id))}
         onAddCust={c => run(a.addCustomer(c))} onUpdateCust={c => run(a.updateCustomer(c))} onDeleteCust={id => run(a.deleteCustomer(id))}
         onSetInvoiceStatus={(id, st) => run(ledger.setInvoiceStatus(id, st))} onDeleteInvoice={id => run(ledger.deleteInvoice(id), 'Invoice deleted; its hours are unbilled again.')}
+        onRetryQboInvoice={id => run(ledger.retryQboInvoice(id), 'Invoice created in QuickBooks.')}
         onUpdateCompany={d => run(a.saveCompany(d), 'Company info saved on this device.')} taxRate={prefs.taxRate}
         ledger={ledger} uid={user.uid} online={online} toast={toast} initialView={qboReturn ? 'profile' : undefined} />}
     </Suspense>

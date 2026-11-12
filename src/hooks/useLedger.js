@@ -6,6 +6,7 @@ import { createRemote } from '../lib/remote.js';
 import { createAccountClient } from '../lib/supabaseClient.js';
 import { createActions, deriveView } from '../lib/ledgerActions.js';
 import { backupLegacyStorage, latestBackup, setBackupStatus } from '../lib/legacy.js';
+import { createQboInvoice as apiCreateQboInvoice, retryQboInvoice as apiRetryQboInvoice } from '../lib/qboApi.js';
 
 let dbPromise = null;
 export function getLocalDb() {
@@ -214,6 +215,31 @@ export function useLedger(user, { online = true } = {}) {
     };
   }), [withCtx]);
 
+  // Records an invoice AND creates it in QuickBooks (server does both, in
+  // that order). ok means the hours are billed here; data.qbo says whether
+  // QuickBooks has the invoice yet.
+  const createQboInvoice = useCallback((invoice, sessionIds, lines) => withCtx(async c => {
+    const r = await apiCreateQboInvoice(c.uid, invoice, sessionIds, lines);
+    if (ctx.current !== c) return { ok: false, error: 'Account changed.' };
+    if (!r.ok) return { ok: false, error: r.error, code: r.code || null, retryable: !!r.uncertain };
+    const { invoice: inv, lines: savedLines, qbo } = r.data || {};
+    if (!inv?.id) return { ok: false, error: 'The server answered in an unexpected way. Try again.', retryable: true };
+    await c.store.putServerRows('invoices', [inv]);
+    await c.store.putServerRows('invoice_lines', savedLines || []);
+    const sessions = await c.remote.fetchAll('sessions');
+    if (sessions.ok) await c.store.applyPull('sessions', sessions.data, Date.now() - 1);
+    return { ok: true, data: { invoice: inv, lines: savedLines || [], replayed: r.data?.replayed, qbo: qbo || { ok: false, error: null } } };
+  }), [withCtx]);
+
+  const retryQboInvoice = useCallback(id => withCtx(async c => {
+    const r = await apiRetryQboInvoice(c.uid, id);
+    if (ctx.current !== c) return { ok: false, error: 'Account changed.' };
+    if (!r.ok) return { ok: false, error: r.error, code: r.code || null };
+    if (r.data?.invoice?.id) await c.store.putServerRows('invoices', [r.data.invoice]);
+    if (!r.data?.qbo?.ok) return { ok: false, error: r.data?.qbo?.error || 'QuickBooks did not accept the invoice. Try again.' };
+    return { ok: true, data: r.data.invoice };
+  }), [withCtx]);
+
   // ---- outbox management --------------------------------------------------
   const retryOp = useCallback(opId => withCtx(async c => { await c.store.retry(opId); c.engine.sync(); return { ok: true }; }), [withCtx]);
   const discardOp = useCallback(opId => withCtx(async c => { await c.store.discard(opId); return { ok: true }; }), [withCtx]);
@@ -244,7 +270,7 @@ export function useLedger(user, { online = true } = {}) {
     legacy: state.legacy,
     online,
     actions,
-    recordInvoice, setInvoiceStatus, deleteInvoice, qboStatus,
+    recordInvoice, setInvoiceStatus, deleteInvoice, qboStatus, createQboInvoice, retryQboInvoice,
     retryOp, discardOp, resolveConflict, syncNow, prepareSignOut,
     getStore: () => (ctx.current?.uid === uid ? ctx.current.store : null),
   };
