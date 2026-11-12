@@ -20,6 +20,9 @@ function Shell({ children }) {
         <div style={{ color: '#777', fontSize: 14, marginTop: 6 }}>Time tracking for the job site</div>
       </div>
       {children}
+      <div style={{ marginTop: 28, textAlign: 'center', fontSize: 12, color: '#777' }}>
+        <a href="/privacy.html" style={{ color: '#777' }}>Privacy Policy</a>{' · '}<a href="/terms.html" style={{ color: '#777' }}>Terms of Use</a>
+      </div>
     </main>
   );
 }
