@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   escapeQueryValue, cleanDisplayName, customerPayload, lineDescription, itemIdFor, buildInvoicePayload,
-  parseInvoiceResult, faultMessage, UUID,
+  parseInvoiceResult, faultMessage, UUID, nextDocNumber,
 } from './invoice.ts';
 
 const settings = { labour_item_id: '3', half_day_item_id: null, full_day_item_id: '7', tax_code_id: '5' };
@@ -101,5 +101,36 @@ describe('QuickBooks answers', () => {
     expect(UUID.test('a0000000-0000-4000-8000-0000000000f1')).toBe(true);
     expect(UUID.test("a0000000-0000-4000-8000-0000000000f1' or 1=1")).toBe(false);
     expect(UUID.test('123')).toBe(false);
+  });
+});
+
+describe('invoice number when QuickBooks does not assign one', () => {
+  it('continues the most recent pattern', () => {
+    expect(nextDocNumber(['1002', '1001'])).toBe('1003');
+    expect(nextDocNumber([null, '', '1002', '1001'])).toBe('1003'); // newest invoice has no number
+    expect(nextDocNumber(['INV-0099', 'INV-0098'])).toBe('INV-0100');
+    expect(nextDocNumber(['2026-009'])).toBe('2026-010');
+    expect(nextDocNumber(['999'])).toBe('1000');
+  });
+
+  it('skips numbers already in use', () => {
+    expect(nextDocNumber(['1002', '1004', '1003'])).toBe('1005');
+    expect(nextDocNumber(['A7', 'A8', 'A9'])).toBe('A10');
+  });
+
+  it('starts at 1001 when there is nothing to follow', () => {
+    expect(nextDocNumber([])).toBe('1001');
+    expect(nextDocNumber([null, undefined, ''])).toBe('1001');
+    expect(nextDocNumber(['DRAFT', 'no digits'])).toBe('1001');
+  });
+
+  it('gives up rather than exceed the QuickBooks length limit', () => {
+    expect(nextDocNumber(['X'.repeat(20) + '99'])).toBeNull();
+  });
+
+  it('is sent only when provided', () => {
+    const base = { invoiceId: 'i', txnDate: '2026-11-11', customerRef: '1', lines: [], settings: { labour_item_id: '3', half_day_item_id: null, full_day_item_id: null, tax_code_id: '5' } };
+    expect(buildInvoicePayload({ ...base, docNumber: '1003' }).DocNumber).toBe('1003');
+    expect(buildInvoicePayload({ ...base, docNumber: null })).not.toHaveProperty('DocNumber');
   });
 });

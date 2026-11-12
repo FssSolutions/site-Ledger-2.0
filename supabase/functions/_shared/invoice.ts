@@ -66,7 +66,31 @@ export function itemIdFor(unit: string, s: QboSettings) {
   return s.labour_item_id;
 }
 
+// The next invoice number, following the pattern of the most recent numbered
+// invoice ("1002" -> "1003", "INV-0099" -> "INV-0100") and skipping numbers
+// already in use. `recent` is DocNumbers, newest first.
+export function nextDocNumber(recent: unknown[]) {
+  const used = new Set(recent.filter((d): d is string => typeof d === 'string' && d.trim() !== '').map(d => d.trim()));
+  let prefix = '';
+  let digits = '1000';
+  for (const d of recent) {
+    const m = typeof d === 'string' ? /^(.*?)(\d{1,15})$/.exec(d.trim()) : null;
+    if (m) { prefix = m[1]; digits = m[2]; break; }
+  }
+  let n = BigInt(digits);
+  for (let i = 0; i < 1000; i += 1) {
+    n += 1n;
+    const candidate = prefix + n.toString().padStart(digits.length, '0');
+    if (candidate.length > 21) return null; // QuickBooks' limit for invoice numbers
+    if (!used.has(candidate)) return candidate;
+  }
+  return null;
+}
+
 export interface InvoiceInput {
+  // Only when the QuickBooks company uses custom transaction numbers;
+  // otherwise QuickBooks numbers the invoice itself.
+  docNumber?: string | null;
   invoiceId: string;
   txnDate: string | null;
   customerRef: string;
@@ -81,6 +105,7 @@ export function buildInvoicePayload(input: InvoiceInput) {
   const email = text(input.billEmail, 100);
   return {
     CustomerRef: { value: input.customerRef },
+    ...(input.docNumber ? { DocNumber: input.docNumber } : {}),
     ...(input.txnDate && /^\d{4}-\d{2}-\d{2}$/.test(input.txnDate) ? { TxnDate: input.txnDate } : {}),
     PrivateNote: `SiteLedger ${input.invoiceId}`,
     GlobalTaxCalculation: 'TaxExcluded',
@@ -175,6 +200,23 @@ async function ensureCustomer(cfg: QboConfig, conn: Connection, customer: Custom
   return { id, fromLink: false };
 }
 
+// When the QuickBooks company has "custom transaction numbers" on, QuickBooks
+// leaves the invoice number blank unless we send one. Returns the next number
+// in that case, or null when QuickBooks numbers invoices itself. Best effort:
+// on any trouble the invoice is still created, just without a number.
+async function docNumberIfNeeded(cfg: QboConfig, conn: Connection): Promise<string | null> {
+  try {
+    const r = await qboFetch(cfg, conn, 'preferences');
+    if (!r.ok) { await r.body?.cancel(); return null; }
+    if ((await r.json())?.Preferences?.SalesFormsPrefs?.CustomTxnNumbers !== true) return null;
+    const recent = await qboQuery(cfg, conn, 'select DocNumber from Invoice orderby MetaData.CreateTime desc maxresults 200');
+    // deno-lint-ignore no-explicit-any
+    return nextDocNumber((Array.isArray(recent?.Invoice) ? recent.Invoice : []).map((i: any) => i?.DocNumber));
+  } catch {
+    return null;
+  }
+}
+
 // deno-lint-ignore no-explicit-any
 export type PushResult = { ok: boolean; error: string | null; invoice: any };
 
@@ -211,6 +253,7 @@ export async function pushInvoice(cfg: QboConfig, conn: Connection, invoice: any
   try {
     const cust = await ensureCustomer(cfg, conn, customer);
     const payload = buildInvoicePayload({
+      docNumber: await docNumberIfNeeded(cfg, conn),
       invoiceId: row.id,
       txnDate: row.date_generated,
       customerRef: cust.id,
