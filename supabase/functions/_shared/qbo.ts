@@ -266,6 +266,246 @@ export async function getUserId(cfg: QboConfig, authHeader: string): Promise<str
   }
 }
 
+// ---- using a stored connection ----------------------------------------------
+
+export type QboErrorKind = 'not_connected' | 'reconnect' | 'unavailable';
+
+// not_connected – this account has no QuickBooks connection.
+// reconnect     – Intuit no longer accepts the stored access; the user must
+//                 connect again.
+// unavailable   – temporary (network, Intuit or database trouble). Retry.
+export class QboError extends Error {
+  kind: QboErrorKind;
+  constructor(kind: QboErrorKind) {
+    super(kind);
+    this.kind = kind;
+  }
+}
+
+export interface QboSettings {
+  labour_item_id: string | null;
+  half_day_item_id: string | null;
+  full_day_item_id: string | null;
+  tax_code_id: string | null;
+}
+
+export interface Connection {
+  userId: string;
+  realmId: string;
+  accessToken: string;
+  companyName: string | null;
+  settings: QboSettings;
+  // A token refresh in progress, shared by requests running in parallel.
+  refreshing?: Promise<void>;
+}
+
+export const needsRefresh = (accessExpiresAt: string, nowMs: number) => !(Date.parse(accessExpiresAt) > nowMs + 30_000);
+
+type RefreshResult = { ok: true; tokens: TokenSet } | { ok: false; revoked: boolean };
+
+// `revoked` is true only when Intuit says the refresh token itself is no
+// longer valid (expired, or access removed in QuickBooks).
+export async function refreshTokens(cfg: QboConfig, refreshToken: string): Promise<RefreshResult> {
+  let r: Response;
+  try {
+    r = await fetch(INTUIT.token, {
+      method: 'POST',
+      headers: { Authorization: basicAuth(cfg), Accept: 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: refreshToken }),
+      signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+    });
+  } catch {
+    return { ok: false, revoked: false };
+  }
+  const data = await r.json().catch(() => null);
+  if (!r.ok) return { ok: false, revoked: r.status === 400 && data?.error === 'invalid_grant' };
+  const tokens = parseTokenResponse(data, Date.now());
+  return tokens ? { ok: true, tokens } : { ok: false, revoked: false };
+}
+
+async function readRow(cfg: QboConfig, uid: string) {
+  const r = await db(cfg, `qbo_connections?user_id=eq.${uid}&select=*`);
+  if (!r.ok) throw new QboError('unavailable');
+  return (await r.json())?.[0] ?? null;
+}
+
+async function markNeedsReconnect(cfg: QboConfig, uid: string) {
+  await db(cfg, `qbo_connections?user_id=eq.${uid}`, { method: 'PATCH', prefer: 'return=minimal', body: { status: 'needs_reconnect', updated_at: new Date().toISOString() } }).catch(() => null);
+}
+
+// deno-lint-ignore no-explicit-any
+function toConnection(row: any, accessToken: string): Connection {
+  return {
+    userId: row.user_id,
+    realmId: row.realm_id,
+    accessToken,
+    companyName: row.company_name ?? null,
+    settings: {
+      labour_item_id: row.labour_item_id ?? null,
+      half_day_item_id: row.half_day_item_id ?? null,
+      full_day_item_id: row.full_day_item_id ?? null,
+      tax_code_id: row.tax_code_id ?? null,
+    },
+  };
+}
+
+// deno-lint-ignore no-explicit-any
+async function refreshRow(cfg: QboConfig, key: CryptoKey, row: any): Promise<Connection> {
+  const uid: string = row.user_id;
+  let refreshToken: string;
+  try { refreshToken = await decryptToken(key, row.refresh_token_enc, uid); } catch {
+    await markNeedsReconnect(cfg, uid);
+    throw new QboError('reconnect');
+  }
+  const res = await refreshTokens(cfg, refreshToken);
+  if (!res.ok) {
+    if (res.revoked) { await markNeedsReconnect(cfg, uid); throw new QboError('reconnect'); }
+    throw new QboError('unavailable');
+  }
+  // Store only if nobody else refreshed in the meantime; if they did, use
+  // what they stored. Either way the newest refresh token is the one kept.
+  const saved = await db(cfg, `qbo_connections?user_id=eq.${uid}&access_expires_at=eq.${encodeURIComponent(row.access_expires_at)}`, {
+    method: 'PATCH',
+    prefer: 'return=representation',
+    body: {
+      access_token_enc: await encryptToken(key, res.tokens.accessToken, uid),
+      refresh_token_enc: await encryptToken(key, res.tokens.refreshToken, uid),
+      access_expires_at: res.tokens.accessExpiresAt,
+      refresh_expires_at: res.tokens.refreshExpiresAt,
+      status: 'connected',
+      updated_at: new Date().toISOString(),
+    },
+  });
+  if (!saved.ok) throw new QboError('unavailable');
+  if (((await saved.json()) ?? []).length === 0) {
+    const latest = await readRow(cfg, uid);
+    if (!latest) throw new QboError('not_connected');
+    return toConnection(latest, await decryptToken(key, latest.access_token_enc, uid));
+  }
+  return toConnection(row, res.tokens.accessToken);
+}
+
+// Loads the account's connection with a usable access token, refreshing it
+// when it has expired (or when `forceRefresh` is set).
+export async function loadConnection(cfg: QboConfig, uid: string, forceRefresh = false): Promise<Connection> {
+  const row = await readRow(cfg, uid);
+  if (!row) throw new QboError('not_connected');
+  // Connected under different keys (e.g. sandbox, and the server is now on
+  // production): those tokens cannot be used.
+  if (row.environment !== cfg.env || row.status === 'needs_reconnect') throw new QboError('reconnect');
+  const key = await importTokenKey(cfg.tokenKey);
+  if (!forceRefresh && !needsRefresh(row.access_expires_at, Date.now())) {
+    try { return toConnection(row, await decryptToken(key, row.access_token_enc, uid)); } catch { /* unreadable: refresh instead */ }
+  }
+  return await refreshRow(cfg, key, row);
+}
+
+// One request to the QuickBooks API for this connection. `path` is relative
+// to the company, e.g. "query?query=...". If QuickBooks rejects the access
+// token it is refreshed once and the request retried.
+export async function qboFetch(cfg: QboConfig, conn: Connection, path: string, init: { method?: string; body?: unknown } = {}): Promise<Response> {
+  const send = (token: string) => {
+    const u = new URL(`${INTUIT.api[cfg.env]}/v3/company/${conn.realmId}/${path}`);
+    u.searchParams.set('minorversion', MINOR_VERSION);
+    return fetch(u, {
+      method: init.method || 'GET',
+      headers: { Authorization: `Bearer ${token}`, Accept: 'application/json', ...(init.body === undefined ? {} : { 'Content-Type': 'application/json' }) },
+      body: init.body === undefined ? undefined : JSON.stringify(init.body),
+      signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+    });
+  };
+  let r: Response;
+  const used = conn.accessToken;
+  try { r = await send(used); } catch { throw new QboError('unavailable'); }
+  if (r.status !== 401) return r;
+  await r.body?.cancel();
+  // Refresh once, even when several requests were rejected at the same time.
+  if (conn.accessToken === used) {
+    conn.refreshing ??= loadConnection(cfg, conn.userId, true)
+      .then(fresh => { conn.accessToken = fresh.accessToken; })
+      .finally(() => { conn.refreshing = undefined; });
+  }
+  if (conn.refreshing) await conn.refreshing;
+  try { r = await send(conn.accessToken); } catch { throw new QboError('unavailable'); }
+  if (r.status === 401) {
+    await r.body?.cancel();
+    await markNeedsReconnect(cfg, conn.userId);
+    throw new QboError('reconnect');
+  }
+  return r;
+}
+
+// Runs a QuickBooks query and returns its QueryResponse object.
+// deno-lint-ignore no-explicit-any
+export async function qboQuery(cfg: QboConfig, conn: Connection, query: string): Promise<any> {
+  const r = await qboFetch(cfg, conn, `query?query=${encodeURIComponent(query)}`);
+  if (!r.ok) { await r.body?.cancel(); throw new QboError('unavailable'); }
+  return (await r.json().catch(() => null))?.QueryResponse ?? {};
+}
+
+// ---- invoice setup choices --------------------------------------------------
+
+export const validQboId = (v: unknown): v is string => typeof v === 'string' && /^[A-Za-z0-9]{1,20}$/.test(v);
+const label = (v: unknown) => (typeof v === 'string' ? v.trim().slice(0, 120) : '');
+
+export interface ItemOption { id: string; name: string; type: string }
+export interface TaxCodeOption { id: string; name: string; description: string; rate: number | null }
+
+// Things that can go on an invoice line as work done: services (and
+// non-inventory items, which some companies use for labour).
+export function pickItems(queryResponse: unknown): ItemOption[] {
+  // deno-lint-ignore no-explicit-any
+  const items: any[] = Array.isArray((queryResponse as any)?.Item) ? (queryResponse as any).Item : [];
+  return items
+    .filter(i => validQboId(i?.Id) && i.Active !== false && (i.Type === 'Service' || i.Type === 'NonInventory') && label(i.FullyQualifiedName || i.Name))
+    .map(i => ({ id: i.Id as string, name: label(i.FullyQualifiedName || i.Name), type: i.Type as string }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+// Sales tax codes with their total rate in percent (null when unknown).
+export function pickTaxCodes(codesResponse: unknown, ratesResponse: unknown): TaxCodeOption[] {
+  // deno-lint-ignore no-explicit-any
+  const rates: any[] = Array.isArray((ratesResponse as any)?.TaxRate) ? (ratesResponse as any).TaxRate : [];
+  const rateById = new Map<string, number>();
+  for (const r of rates) {
+    const n = Number(r?.RateValue);
+    if (validQboId(r?.Id) && Number.isFinite(n)) rateById.set(r.Id, n);
+  }
+  // deno-lint-ignore no-explicit-any
+  const codes: any[] = Array.isArray((codesResponse as any)?.TaxCode) ? (codesResponse as any).TaxCode : [];
+  const out: TaxCodeOption[] = [];
+  for (const c of codes) {
+    if (!validQboId(c?.Id) || c.Active === false || !label(c.Name)) continue;
+    const details = c?.SalesTaxRateList?.TaxRateDetail;
+    // Codes with no sales rates are for purchases only.
+    if (!Array.isArray(details) || details.length === 0) continue;
+    let total: number | null = 0;
+    for (const d of details) {
+      const v = rateById.get(d?.TaxRateRef?.value);
+      if (v === undefined) { total = null; break; }
+      total += v;
+    }
+    out.push({ id: c.Id, name: label(c.Name), description: label(c.Description), rate: total === null ? null : Math.round(total * 1000) / 1000 });
+  }
+  return out.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export type SettingsCheck = { ok: true; settings: QboSettings } | { ok: false; error: string };
+
+// Accepts only ids that exist in the lists just read from QuickBooks.
+export function checkSettings(input: unknown, items: ItemOption[], taxCodes: TaxCodeOption[]): SettingsCheck {
+  const s = (input ?? {}) as Record<string, unknown>;
+  const itemIds = new Set(items.map(i => i.id));
+  const optional = (v: unknown) => (v === null || v === undefined || v === '' ? null : v);
+  const half = optional(s.half_day_item_id);
+  const full = optional(s.full_day_item_id);
+  if (!validQboId(s.labour_item_id) || !itemIds.has(s.labour_item_id)) return { ok: false, error: 'Choose the QuickBooks item to use for hourly labour.' };
+  if (half !== null && (!validQboId(half) || !itemIds.has(half))) return { ok: false, error: 'The half-day item was not found in QuickBooks.' };
+  if (full !== null && (!validQboId(full) || !itemIds.has(full))) return { ok: false, error: 'The full-day item was not found in QuickBooks.' };
+  if (!validQboId(s.tax_code_id) || !taxCodes.some(t => t.id === s.tax_code_id)) return { ok: false, error: 'Choose the QuickBooks tax code to use on labour.' };
+  return { ok: true, settings: { labour_item_id: s.labour_item_id, half_day_item_id: half as string | null, full_day_item_id: full as string | null, tax_code_id: s.tax_code_id } };
+}
+
 // ---- HTTP -------------------------------------------------------------------
 
 export function corsHeaders(req: Request, allowedOrigins: string[]) {

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   readConfig, b64encode, b64decode, importTokenKey, encryptToken, decryptToken, newState, hashState,
   authorizeUrl, appReturnUrl, parseTokenResponse, validRealmId, validAuthCode, validState, corsHeaders, parseOrigins,
+  needsRefresh, pickItems, pickTaxCodes, checkSettings, validQboId,
 } from './qbo.ts';
 
 const KEY = b64encode(new Uint8Array(32).map((_, i) => i + 1));
@@ -154,5 +155,82 @@ describe('qbo CORS', () => {
     expect(corsHeaders(req('https://other.example'), allowed)['Access-Control-Allow-Origin']).toBe('https://other.example');
     expect(corsHeaders(req('https://evil.example'), allowed)['Access-Control-Allow-Origin']).toBe('https://app.example');
     expect(corsHeaders(req('https://evil.example'), parseOrigins(undefined))['Access-Control-Allow-Origin']).toBe('*');
+  });
+});
+
+describe('qbo access token refresh timing', () => {
+  const now = Date.parse('2026-11-11T12:00:00Z');
+  it('refreshes when expired, about to expire, or unreadable', () => {
+    expect(needsRefresh('2026-11-11T12:30:00Z', now)).toBe(false);
+    expect(needsRefresh('2026-11-11T12:00:10Z', now)).toBe(true);
+    expect(needsRefresh('2026-11-11T11:00:00Z', now)).toBe(true);
+    expect(needsRefresh('not a date', now)).toBe(true);
+  });
+});
+
+describe('qbo invoice setup choices', () => {
+  const items = {
+    Item: [
+      { Id: '3', Name: 'Hours', FullyQualifiedName: 'Hours', Type: 'Service', Active: true },
+      { Id: '7', Name: 'Day rate', FullyQualifiedName: 'Labour:Day rate', Type: 'Service', Active: true },
+      { Id: '9', Name: 'Lumber', Type: 'Inventory', Active: true },
+      { Id: '10', Name: 'Labour', Type: 'Category', Active: true },
+      { Id: '11', Name: 'Old service', Type: 'Service', Active: false },
+      { Id: '12', Name: 'Misc', Type: 'NonInventory', Active: true },
+      { Id: 'bad id!', Name: 'Injected', Type: 'Service', Active: true },
+      { Id: '13', Name: '   ', Type: 'Service', Active: true },
+    ],
+  };
+  const codes = {
+    TaxCode: [
+      { Id: '5', Name: 'GST', Description: 'GST', Active: true, SalesTaxRateList: { TaxRateDetail: [{ TaxRateRef: { value: '20' } }] } },
+      { Id: '6', Name: 'GST/PST BC', Active: true, SalesTaxRateList: { TaxRateDetail: [{ TaxRateRef: { value: '20' } }, { TaxRateRef: { value: '21' } }] } },
+      { Id: '2', Name: 'Exempt', Active: true, SalesTaxRateList: { TaxRateDetail: [{ TaxRateRef: { value: '22' } }] } },
+      { Id: '8', Name: 'Purchases only', Active: true, SalesTaxRateList: { TaxRateDetail: [] }, PurchaseTaxRateList: { TaxRateDetail: [{ TaxRateRef: { value: '20' } }] } },
+      { Id: '4', Name: 'Retired', Active: false, SalesTaxRateList: { TaxRateDetail: [{ TaxRateRef: { value: '20' } }] } },
+      { Id: '14', Name: 'Mystery', Active: true, SalesTaxRateList: { TaxRateDetail: [{ TaxRateRef: { value: '99' } }] } },
+    ],
+  };
+  const rates = { TaxRate: [{ Id: '20', RateValue: 5 }, { Id: '21', RateValue: 7 }, { Id: '22', RateValue: 0 }] };
+
+  it('offers only active service-like items, sorted', () => {
+    expect(pickItems(items)).toEqual([
+      { id: '3', name: 'Hours', type: 'Service' },
+      { id: '7', name: 'Labour:Day rate', type: 'Service' },
+      { id: '12', name: 'Misc', type: 'NonInventory' },
+    ]);
+    expect(pickItems({})).toEqual([]);
+    expect(pickItems(null)).toEqual([]);
+  });
+
+  it('offers active sales tax codes with their total rate', () => {
+    expect(pickTaxCodes(codes, rates)).toEqual([
+      { id: '2', name: 'Exempt', description: '', rate: 0 },
+      { id: '5', name: 'GST', description: 'GST', rate: 5 },
+      { id: '6', name: 'GST/PST BC', description: '', rate: 12 },
+      { id: '14', name: 'Mystery', description: '', rate: null },
+    ]);
+    expect(pickTaxCodes({}, {})).toEqual([]);
+  });
+
+  it('accepts only choices that exist in QuickBooks', () => {
+    const i = pickItems(items);
+    const t = pickTaxCodes(codes, rates);
+    expect(checkSettings({ labour_item_id: '3', half_day_item_id: '', full_day_item_id: '7', tax_code_id: '5' }, i, t)).toEqual({
+      ok: true, settings: { labour_item_id: '3', half_day_item_id: null, full_day_item_id: '7', tax_code_id: '5' },
+    });
+    expect(checkSettings({ labour_item_id: '9', tax_code_id: '5' }, i, t).ok).toBe(false);   // inventory item
+    expect(checkSettings({ labour_item_id: '3', tax_code_id: '8' }, i, t).ok).toBe(false);   // purchases-only code
+    expect(checkSettings({ labour_item_id: '3', tax_code_id: '5', half_day_item_id: '999' }, i, t).ok).toBe(false);
+    expect(checkSettings({ labour_item_id: 3, tax_code_id: '5' }, i, t).ok).toBe(false);
+    expect(checkSettings(null, i, t).ok).toBe(false);
+  });
+
+  it('validates QuickBooks ids', () => {
+    expect(validQboId('12')).toBe(true);
+    expect(validQboId('TAX')).toBe(true);
+    expect(validQboId("1' or '1'='1")).toBe(false);
+    expect(validQboId('')).toBe(false);
+    expect(validQboId(12)).toBe(false);
   });
 });

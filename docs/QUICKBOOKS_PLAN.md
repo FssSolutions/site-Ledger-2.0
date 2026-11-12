@@ -5,7 +5,11 @@ Status: phase 1 in progress. Written 2026-11-03.
 Done so far (2026-11-11): connect / disconnect. Migration
 `20261111120000_quickbooks_connection.sql`, Edge Functions `qbo-connect` and
 `qbo-callback`, and the **Connect QuickBooks** card under Company → Profile.
-The invoice columns, the single `qbo` function and the schema-version bump
+Also done: invoice setup. The `qbo` Edge Function (`options`,
+`save-settings`) reads service items and sales tax codes from the connected
+company, refreshes expired access automatically, and the card lets the user
+choose the labour item, optional half/full-day items and the tax code.
+The invoice columns, the remaining `qbo` actions and the schema-version bump
 described below come with the invoice step.
 
 ## Goal

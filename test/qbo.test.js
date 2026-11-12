@@ -35,3 +35,13 @@ describe('return from QuickBooks sign-in', () => {
     expect(m.message).not.toContain('<b>');
   });
 });
+
+describe('tax code label', () => {
+  it('shows the rate when known', async () => {
+    const { taxCodeLabel } = await import('../src/lib/qboApi.js');
+    expect(taxCodeLabel({ name: 'GST', rate: 5 })).toBe('GST (5%)');
+    expect(taxCodeLabel({ name: 'GST/PST BC', rate: 12 })).toBe('GST/PST BC (12%)');
+    expect(taxCodeLabel({ name: 'Mystery', rate: null })).toBe('Mystery');
+    expect(taxCodeLabel(null)).toBe('');
+  });
+});

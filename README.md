@@ -76,7 +76,7 @@ Server setup for the connection (Edge Function secrets, never `VITE_*`):
 in the Intuit app), `QBO_TOKEN_KEY` (32 random bytes, base64) and `APP_URL`
 (where the app is hosted). Apply
 `supabase/migrations/20261111120000_quickbooks_connection.sql`, then deploy
-`qbo-connect` and `qbo-callback`.
+`qbo-connect`, `qbo-callback` and `qbo`.
 
 ## Reminders
 

@@ -6,20 +6,22 @@ import { SUPABASE_URL, accessTokenFor } from './supabaseClient.js';
 const TIMEOUT_MS = 20000;
 const INTUIT_SIGN_IN = 'https://appcenter.intuit.com/';
 
-async function callQbo(uid, action) {
+// Calls one of the QuickBooks Edge Functions. On failure, `code` is set when
+// the server says what to do next: 'reconnect' or 'not_connected'.
+async function callQbo(fn, uid, body) {
   let token;
   try { token = await accessTokenFor(uid); } catch { return { ok: false, error: 'QuickBooks needs internet and a signed-in session.' }; }
   try {
-    const r = await fetch(`${SUPABASE_URL}/functions/v1/qbo-connect`, {
+    const r = await fetch(`${SUPABASE_URL}/functions/v1/${fn}`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, apikey: import.meta.env.VITE_SUPABASE_ANON_KEY, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action }),
+      body: JSON.stringify(body),
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
     const data = await r.json().catch(() => null);
-    if (r.status === 401) return { ok: false, error: 'Your session expired. Sign in again to connect QuickBooks.' };
+    if (r.status === 401) return { ok: false, error: 'Your session expired. Sign in again to use QuickBooks.' };
     if (r.status === 404) return { ok: false, error: 'QuickBooks is not set up on the server yet.' };
-    if (!r.ok) return { ok: false, error: data?.error || 'QuickBooks is temporarily unavailable. Try again.' };
+    if (!r.ok) return { ok: false, error: data?.error || 'QuickBooks is temporarily unavailable. Try again.', code: data?.code || null };
     return { ok: true, data };
   } catch (e) {
     if (e?.name === 'TimeoutError') return { ok: false, error: 'QuickBooks took too long to respond. Try again.' };
@@ -27,9 +29,15 @@ async function callQbo(uid, action) {
   }
 }
 
+// Items and tax codes from the connected QuickBooks company, plus the
+// current choices: { items, taxCodes, selected, company_name }.
+export const loadQboOptions = uid => callQbo('qbo', uid, { action: 'options' });
+
+export const saveQboSettings = (uid, settings) => callQbo('qbo', uid, { action: 'save-settings', settings });
+
 // Returns the Intuit sign-in URL to send the browser to.
 export async function startQboConnect(uid) {
-  const r = await callQbo(uid, 'start');
+  const r = await callQbo('qbo-connect', uid, { action: 'start' });
   if (!r.ok) return r;
   const url = r.data?.url;
   // Only ever navigate to Intuit, whatever the server answered.
@@ -37,7 +45,13 @@ export async function startQboConnect(uid) {
   return { ok: true, data: { url } };
 }
 
-export const disconnectQbo = uid => callQbo(uid, 'disconnect');
+export const disconnectQbo = uid => callQbo('qbo-connect', uid, { action: 'disconnect' });
+
+// "GST (5%)" for a tax code option from loadQboOptions.
+export function taxCodeLabel(code) {
+  if (!code) return '';
+  return code.rate == null ? code.name : `${code.name} (${Number(code.rate)}%)`;
+}
 
 // ---- return from Intuit -----------------------------------------------------
 // qbo-callback redirects to the app with ?qbo=connected|cancelled|error and an

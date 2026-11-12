@@ -7,7 +7,7 @@ const fmtCAD = v => fmtCents(toCents(v));
 import { useAccentColor } from '../lib/AccentColorContext.js';
 import QuickBooksCard from '../components/QuickBooksCard.jsx';
 
-export default function CompanyTab({ employees, onAddEmp, onUpdateEmp, onDeleteEmp, customers, onAddCust, onUpdateCust, onDeleteCust, invoices, invoiceLines = [], sessions = [], onSetInvoiceStatus, onDeleteInvoice, company, onUpdateCompany, isDesktop, ledger, uid, online, toast, initialView }) {
+export default function CompanyTab({ employees, onAddEmp, onUpdateEmp, onDeleteEmp, customers, onAddCust, onUpdateCust, onDeleteCust, invoices, invoiceLines = [], sessions = [], onSetInvoiceStatus, onDeleteInvoice, company, onUpdateCompany, isDesktop, ledger, uid, online, toast, initialView, taxRate }) {
   const accent = useAccentColor();
   const [view, setView] = useState(initialView || 'crew');
 
@@ -281,7 +281,7 @@ export default function CompanyTab({ employees, onAddEmp, onUpdateEmp, onDeleteE
               </button>
             </div>
           </div>
-          {ledger && uid && <QuickBooksCard ledger={ledger} uid={uid} online={online} toast={toast} />}
+          {ledger && uid && <QuickBooksCard ledger={ledger} uid={uid} online={online} toast={toast} taxRate={taxRate} />}
         </div>
       )}
     </div>

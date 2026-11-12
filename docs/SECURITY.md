@@ -24,8 +24,8 @@
 - Frontend `user_id` values are never trusted; they are checked by RLS.
 - Secrets: only the public anon key is in the browser. The OpenAI key and the
   QuickBooks client secret live in Edge Function secrets.
-- The service-role key is used in exactly one place: the `qbo-connect` and
-  `qbo-callback` Edge Functions, and only to read and write the two
+- The service-role key is used in exactly one place: the `qbo-connect`,
+  `qbo-callback` and `qbo` Edge Functions, and only to read and write the two
   `qbo_*` tables. The browser app never has it.
 
 ### QuickBooks connection
