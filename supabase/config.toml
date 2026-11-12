@@ -8,3 +8,6 @@ verify_jwt = true
 # tied to an account by a single-use state (see the function's header).
 [functions.qbo-callback]
 verify_jwt = false
+
+[functions.qbo]
+verify_jwt = true

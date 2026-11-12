@@ -8,6 +8,7 @@ All notable changes to Site Ledger are documented here.
 
 ### QuickBooks
 - Connect or disconnect a QuickBooks Online company under Company → Profile. This is the first step towards creating invoices in QuickBooks from SiteLedger; connecting on its own changes nothing in QuickBooks. QuickBooks access is stored encrypted on the server and never reaches the phone.
+- Invoice setup on the same card: choose which QuickBooks item (hourly, half-day, full-day) and tax code SiteLedger will put on invoice lines. The lists come from your QuickBooks company.
 
 ### Data safety and account isolation
 - On-device data and pending changes are stored per account in IndexedDB; a change is only ever uploaded under the account that made it. Sign-out keeps unsynced work under its account (after asking) and removes synced cache.

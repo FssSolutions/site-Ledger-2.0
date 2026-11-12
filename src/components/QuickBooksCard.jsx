@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { card } from '../styles.js';
 import { useAccentColor } from '../lib/AccentColorContext.js';
 import { startQboConnect, disconnectQbo } from '../lib/qboApi.js';
+import QuickBooksSetup from './QuickBooksSetup.jsx';
 
 const heading = { color: '#999', fontSize: 11, fontFamily: "'DM Mono', monospace", letterSpacing: 2, textTransform: 'uppercase', marginBottom: 12 };
 const note = { color: '#777', fontSize: 12, lineHeight: 1.5 };
@@ -9,11 +10,12 @@ const note = { color: '#777', fontSize: 12, lineHeight: 1.5 };
 // Connect / disconnect QuickBooks Online. Shows only a status from the
 // server; tokens never reach the browser. Renders nothing when the server
 // does not have the QuickBooks update yet.
-export default function QuickBooksCard({ ledger, uid, online, toast }) {
+export default function QuickBooksCard({ ledger, uid, online, toast, taxRate }) {
   const accent = useAccentColor();
   const { qboStatus, ready } = ledger;
   const [st, setSt] = useState({ phase: 'loading' });
   const [busy, setBusy] = useState(false);
+  const [showSetup, setShowSetup] = useState(false);
   const alive = useRef(true);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
 
@@ -52,6 +54,7 @@ export default function QuickBooksCard({ ledger, uid, online, toast }) {
     setBusy(false);
     if (!r.ok) { toast?.(r.error); return; }
     toast?.('QuickBooks disconnected.', 'success');
+    setShowSetup(false);
     setSt({ phase: 'ready', data: { connected: false } });
     load();
   }
@@ -104,6 +107,23 @@ export default function QuickBooksCard({ ledger, uid, online, toast }) {
               <button type="button" onClick={connect} disabled={busy} style={{ ...primary, marginBottom: 10 }}>{busy ? 'Opening QuickBooks…' : 'Reconnect QuickBooks'}</button>
             </>
           )}
+          {!needsReconnect && (showSetup ? (
+            <div style={{ borderTop: '1px solid #eee', borderBottom: '1px solid #eee', padding: '14px 0', marginBottom: 14 }}>
+              <QuickBooksSetup uid={uid} taxRate={taxRate} toast={toast}
+                onDone={saved => { setShowSetup(false); if (saved) load(); }}
+                onReconnect={() => { setShowSetup(false); toast?.('QuickBooks access expired or was removed. Reconnect to continue.'); load(); }} />
+            </div>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+              <div style={{ ...note, flex: 1 }}>
+                {d.setup_complete ? 'Invoice setup is done: SiteLedger knows which item and tax code to use.' : 'One more step: choose the item and tax code to use on invoice lines.'}
+              </div>
+              <button type="button" onClick={() => setShowSetup(true)} disabled={busy}
+                style={d.setup_complete ? secondary : { ...secondary, background: accent, color: '#fff', border: 'none' }}>
+                {d.setup_complete ? 'Change' : 'Set up invoices'}
+              </button>
+            </div>
+          ))}
           <button type="button" onClick={disconnect} disabled={busy} style={secondary}>Disconnect</button>
         </>
       )}
