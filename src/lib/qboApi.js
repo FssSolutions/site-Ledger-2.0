@@ -54,6 +54,11 @@ export const createQboInvoice = (uid, invoice, sessionIds, lines) =>
 // Sends an already-recorded invoice to QuickBooks again.
 export const retryQboInvoice = (uid, invoiceId) => callQbo('qbo', uid, { action: 'retry-invoice', invoice_id: invoiceId }, INVOICE_TIMEOUT_MS);
 
+// Voids the invoice in QuickBooks, then deletes the SiteLedger record (its
+// hours go back to unbilled). If QuickBooks will not void it, nothing is
+// deleted. code 'qbo_unavailable': it cannot be reached from this account.
+export const deleteQboInvoice = (uid, invoiceId) => callQbo('qbo', uid, { action: 'delete-invoice', invoice_id: invoiceId }, INVOICE_TIMEOUT_MS);
+
 // Can this account create invoices in QuickBooks right now? `status` is the
 // qbo_status() result.
 export function qboInvoiceMode(status) {
@@ -65,11 +70,12 @@ export function qboInvoiceMode(status) {
 // How an invoice relates to QuickBooks, for display.
 //   manual  – recorded by hand        created – in QuickBooks
 //   unsent  – recorded here, not in QuickBooks yet (can be retried)
+//   voided  – voided or deleted in QuickBooks
 export function qboInvoiceState(inv) {
   if (!inv?.qbo_status) return 'manual';
+  if (inv.qbo_status === 'voided' || inv.qbo_status === 'deleted') return 'voided';
   if (inv.qbo_invoice_id || inv.qbo_status === 'created') return 'created';
-  if (inv.qbo_status === 'pending' || inv.qbo_status === 'failed') return 'unsent';
-  return inv.qbo_status;
+  return 'unsent';
 }
 
 // "QuickBooks #1042", or the hand-typed number for invoices recorded by hand.
@@ -77,6 +83,7 @@ export function invoiceTitle(inv) {
   const state = qboInvoiceState(inv);
   if (state === 'manual') return inv?.notes || '—';
   if (state === 'unsent') return 'Not in QuickBooks yet';
+  if (state === 'voided') return inv.qbo_doc_number ? `Voided in QuickBooks #${inv.qbo_doc_number}` : 'Voided in QuickBooks';
   return inv.qbo_doc_number ? `QuickBooks #${inv.qbo_doc_number}` : 'QuickBooks invoice';
 }
 

@@ -121,6 +121,21 @@ export default function App() {
     return r;
   }, [toast]);
 
+  // Deleting an invoice that SiteLedger created in QuickBooks also voids it
+  // there. If QuickBooks cannot be reached for it, offer to delete here only.
+  async function deleteQboInvoice(id) {
+    const r = await ledger.deleteQboInvoice(id);
+    if (r.ok) {
+      toast(r.data.voided ? 'Invoice deleted and voided in QuickBooks. Its hours are unbilled again.' : 'Invoice deleted. Its hours are unbilled again.', 'success');
+      return r;
+    }
+    if (r.code === 'qbo_unavailable' && window.confirm(`${r.error}\n\nDelete it in SiteLedger only? Its hours will go back to unbilled, and you will need to void the invoice in QuickBooks yourself.`)) {
+      return run(ledger.deleteInvoice(id), 'Invoice deleted here only. Void it in QuickBooks too.');
+    }
+    if (r.code !== 'qbo_unavailable') toast(r.error);
+    return r;
+  }
+
   async function finishSignOut() {
     setConfirm(null);
     await ledger.prepareSignOut();
@@ -186,7 +201,7 @@ export default function App() {
         onAddEmp={e => run(a.addEmployee(e))} onUpdateEmp={e => run(a.updateEmployee(e))} onDeleteEmp={id => run(a.deleteEmployee(id))}
         onAddCust={c => run(a.addCustomer(c))} onUpdateCust={c => run(a.updateCustomer(c))} onDeleteCust={id => run(a.deleteCustomer(id))}
         onSetInvoiceStatus={(id, st) => run(ledger.setInvoiceStatus(id, st))} onDeleteInvoice={id => run(ledger.deleteInvoice(id), 'Invoice deleted; its hours are unbilled again.')}
-        onRetryQboInvoice={id => run(ledger.retryQboInvoice(id), 'Invoice created in QuickBooks.')}
+        onRetryQboInvoice={id => run(ledger.retryQboInvoice(id), 'Invoice created in QuickBooks.')} onDeleteQboInvoice={deleteQboInvoice}
         onUpdateCompany={d => run(a.saveCompany(d), 'Company info saved on this device.')} taxRate={prefs.taxRate}
         ledger={ledger} uid={user.uid} online={online} toast={toast} initialView={qboReturn ? 'profile' : undefined} />}
     </Suspense>

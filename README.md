@@ -72,10 +72,17 @@ Two ways to bill hours, depending on the account:
   QuickBooks yourself, then record it here so the hours are not billed twice.
   Nothing is sent to QuickBooks.
 
-Not built yet: paid status from QuickBooks (still a manual toggle), voiding,
-emailing and PDFs from QuickBooks. See
-[docs/QUICKBOOKS_PLAN.md](docs/QUICKBOOKS_PLAN.md). Deleting an invoice record
-here does not delete the QuickBooks invoice.
+Deleting an invoice that SiteLedger created in QuickBooks also **voids** it
+there (it stays in QuickBooks, marked void, with a zero balance) and returns
+its hours to unbilled. If QuickBooks refuses, for example because a payment
+is applied, nothing is deleted. Invoices recorded by hand are only removed
+here.
+
+Accounts that have not connected QuickBooks see no QuickBooks wording.
+
+Not built yet: paid status from QuickBooks (still a manual toggle), noticing
+an invoice that was voided or changed inside QuickBooks, emailing and PDFs
+from QuickBooks. See [docs/QUICKBOOKS_PLAN.md](docs/QUICKBOOKS_PLAN.md).
 
 Server setup for the connection (Edge Function secrets, never `VITE_*`):
 `QBO_CLIENT_ID`, `QBO_CLIENT_SECRET` (from the Intuit developer app),

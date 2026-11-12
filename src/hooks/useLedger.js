@@ -6,7 +6,7 @@ import { createRemote } from '../lib/remote.js';
 import { createAccountClient } from '../lib/supabaseClient.js';
 import { createActions, deriveView } from '../lib/ledgerActions.js';
 import { backupLegacyStorage, latestBackup, setBackupStatus } from '../lib/legacy.js';
-import { createQboInvoice as apiCreateQboInvoice, retryQboInvoice as apiRetryQboInvoice } from '../lib/qboApi.js';
+import { createQboInvoice as apiCreateQboInvoice, retryQboInvoice as apiRetryQboInvoice, deleteQboInvoice as apiDeleteQboInvoice } from '../lib/qboApi.js';
 
 let dbPromise = null;
 export function getLocalDb() {
@@ -240,6 +240,17 @@ export function useLedger(user, { online = true } = {}) {
     return { ok: true, data: r.data.invoice };
   }), [withCtx]);
 
+  // Voids the invoice in QuickBooks and deletes it here (server does both,
+  // in that order). On failure nothing was deleted here.
+  const deleteQboInvoice = useCallback(id => withCtx(async c => {
+    const r = await apiDeleteQboInvoice(c.uid, id);
+    if (ctx.current !== c) return { ok: false, error: 'Account changed.' };
+    if (!r.ok) return { ok: false, error: r.error, code: r.code || null };
+    await c.store.removeServerRow('invoices', id);
+    await c.engine.sync();
+    return { ok: true, data: { voided: !!r.data?.voided } };
+  }), [withCtx]);
+
   // ---- outbox management --------------------------------------------------
   const retryOp = useCallback(opId => withCtx(async c => { await c.store.retry(opId); c.engine.sync(); return { ok: true }; }), [withCtx]);
   const discardOp = useCallback(opId => withCtx(async c => { await c.store.discard(opId); return { ok: true }; }), [withCtx]);
@@ -270,7 +281,7 @@ export function useLedger(user, { online = true } = {}) {
     legacy: state.legacy,
     online,
     actions,
-    recordInvoice, setInvoiceStatus, deleteInvoice, qboStatus, createQboInvoice, retryQboInvoice,
+    recordInvoice, setInvoiceStatus, deleteInvoice, qboStatus, createQboInvoice, retryQboInvoice, deleteQboInvoice,
     retryOp, discardOp, resolveConflict, syncNow, prepareSignOut,
     getStore: () => (ctx.current?.uid === uid ? ctx.current.store : null),
   };
