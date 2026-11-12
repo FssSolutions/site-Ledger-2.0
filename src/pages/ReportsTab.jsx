@@ -189,7 +189,7 @@ export default function ReportsTab({ jobs, employees, sessions, openSessions = [
       <div style={{ padding: '16px 16px 0', display: 'flex', flexDirection: 'column', gap: 8 }}>
         <button type="button" onClick={() => setShowInvoice(true)}
           style={{ width: '100%', padding: '14px', borderRadius: 12, border: 'none', background: accent, color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontFamily: "'Syne', sans-serif" }}>
-          <Icon name="invoice" size={16} /> {qboMode === 'ready' ? 'Create QuickBooks Invoice & Mark Billed' : 'Record Invoice & Mark Billed'}
+          <Icon name="invoice" size={16} /> {qboMode === 'ready' ? 'Create QuickBooks Invoice' : 'Record an Invoice'}
         </button>
         {f.length > 0 && (
           <button type="button" onClick={exportCSV} style={{ width: '100%', padding: '12px', borderRadius: 12, border: '1px solid #ddd', background: '#fff', color: '#555', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
