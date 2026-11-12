@@ -13,20 +13,28 @@
 // POST { action: 'retry-invoice', invoice_id }
 //   Sends an already-recorded invoice to QuickBooks again.
 //   -> { invoice, qbo: { ok, error } }
+// POST { action: 'delete-invoice', invoice_id }
+//   Voids the invoice in QuickBooks (if SiteLedger created it there), then
+//   deletes the SiteLedger record, which returns its hours to unbilled.
+//   -> { ok: true, voided }
+//   If QuickBooks cannot or will not void it, nothing is deleted.
 //
 // verify_jwt = true (config.toml); the account id is confirmed with Supabase
 // Auth. Errors carry a `code` the app can act on:
 //   not_connected – connect QuickBooks first
 //   reconnect     – QuickBooks access expired or was removed; connect again
 //   setup         – choose the invoice item and tax code first
+//   qbo_unavailable – this invoice cannot be reached in QuickBooks from this
+//                     account right now (not connected, or another company)
+//   qbo_refused     – QuickBooks refused to void the invoice
 import {
   readConfig, corsHeaders, parseOrigins, getUserId, db, loadConnection, qboQuery, pickItems, pickTaxCodes,
   checkSettings, QboError, type QboConfig, type Connection,
 } from '../_shared/qbo.ts';
-import { pushInvoice, userDb, UUID, type CustomerRow } from '../_shared/invoice.ts';
+import { pushInvoice, voidInvoice, userDb, UUID, type CustomerRow } from '../_shared/invoice.ts';
 
 const ALLOWED_ORIGINS = parseOrigins(Deno.env.get('ALLOWED_ORIGINS'));
-const ACTIONS = new Set(['options', 'save-settings', 'create-invoice', 'retry-invoice']);
+const ACTIONS = new Set(['options', 'save-settings', 'create-invoice', 'retry-invoice', 'delete-invoice']);
 const MAX_LINES = 500;
 
 function json(req: Request, body: unknown, status = 200) {
@@ -126,6 +134,46 @@ async function retryInvoice(cfg: QboConfig, authHeader: string, uid: string, bod
   return { invoice: result.invoice, qbo: { ok: result.ok, error: result.error } };
 }
 
+// deno-lint-ignore no-explicit-any
+async function deleteInvoice(cfg: QboConfig, authHeader: string, uid: string, body: any) {
+  const id = body?.invoice_id;
+  if (typeof id !== 'string' || !UUID.test(id)) throw new Reply(400, { error: 'Invalid request.' });
+  const invoice = (await ownRow(cfg, authHeader, `invoices?id=eq.${id}&select=*`))?.[0];
+  if (!invoice) throw new Reply(404, { error: 'That invoice was not found.' });
+
+  // Only an invoice SiteLedger created in QuickBooks, and that is still live
+  // there, is voided. Everything else is just removed here.
+  let voided = false;
+  if (invoice.qbo_invoice_id && invoice.qbo_status === 'created') {
+    let conn: Connection;
+    try {
+      conn = await loadConnection(cfg, uid);
+    } catch (ex) {
+      if (ex instanceof QboError && ex.kind !== 'unavailable') {
+        throw new Reply(409, { error: ex.kind === 'reconnect' ? 'QuickBooks needs to be reconnected before this invoice can be voided there.' : 'QuickBooks is not connected, so this invoice cannot be voided there.', code: 'qbo_unavailable' });
+      }
+      throw ex;
+    }
+    if (conn.realmId !== invoice.qbo_realm_id) {
+      throw new Reply(409, { error: 'This invoice was created in a different QuickBooks company than the one connected now, so it cannot be voided from here.', code: 'qbo_unavailable' });
+    }
+    const result = await voidInvoice(cfg, conn, invoice.qbo_invoice_id);
+    if (!result.ok) throw new Reply(409, { error: result.error, code: 'qbo_refused' });
+    voided = !result.alreadyGone;
+    // Remember it before deleting, so a failed delete below is not voided twice.
+    const marked = await db(cfg, `invoices?id=eq.${id}`, { method: 'PATCH', prefer: 'return=minimal', body: { qbo_status: result.alreadyGone ? 'deleted' : 'voided', qbo_balance: 0, qbo_synced_at: new Date().toISOString() } });
+    await marked.body?.cancel();
+  }
+
+  // Deleted as the caller, so RLS applies; the hours go back to unbilled.
+  const del = await userDb(cfg, authHeader, `invoices?id=eq.${id}`, { method: 'DELETE', prefer: 'return=representation' });
+  const gone = del.ok ? await del.json().catch(() => null) : (await del.body?.cancel(), null);
+  if (!Array.isArray(gone) || gone.length !== 1) {
+    throw new Reply(503, { error: voided ? 'The invoice was voided in QuickBooks, but removing it here failed. Delete it again; it will not be voided twice.' : 'The invoice could not be deleted. Try again.' });
+  }
+  return { ok: true, voided };
+}
+
 Deno.serve(async req => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders(req, ALLOWED_ORIGINS) });
   if (req.method !== 'POST') return json(req, { error: 'Method not allowed.' }, 405);
@@ -152,6 +200,7 @@ Deno.serve(async req => {
 
     if (action === 'create-invoice') return json(req, await createInvoice(cfg, authHeader, uid, body));
     if (action === 'retry-invoice') return json(req, await retryInvoice(cfg, authHeader, uid, body));
+    if (action === 'delete-invoice') return json(req, await deleteInvoice(cfg, authHeader, uid, body));
 
     const conn = await loadConnection(cfg, uid);
     const options = await readOptions(cfg, conn);

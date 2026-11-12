@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   escapeQueryValue, cleanDisplayName, customerPayload, lineDescription, itemIdFor, buildInvoicePayload,
-  parseInvoiceResult, faultMessage, UUID, nextDocNumber, faultCodes, referenceNote,
+  parseInvoiceResult, faultMessage, UUID, nextDocNumber, faultCodes, referenceNote, isNotFound,
 } from './invoice.ts';
 
 const settings = { labour_item_id: '3', half_day_item_id: null, full_day_item_id: '7', tax_code_id: '5' };
@@ -147,5 +147,14 @@ describe('troubleshooting details', () => {
   it('adds Intuit\'s request id to the message shown to the user', () => {
     expect(referenceNote(new Response('', { headers: { intuit_tid: '1-abc123' } }))).toBe(' (QuickBooks reference 1-abc123)');
     expect(referenceNote(new Response(''))).toBe('');
+  });
+});
+
+describe('invoice already gone from QuickBooks', () => {
+  it('is recognised by status or by QuickBooks code 610', () => {
+    expect(isNotFound(404, null)).toBe(true);
+    expect(isNotFound(400, { Fault: { type: 'ValidationFault', Error: [{ code: '610', Message: 'Object Not Found' }] } })).toBe(true);
+    expect(isNotFound(400, { Fault: { type: 'ValidationFault', Error: [{ code: '6190', Message: 'Invalid Company Status' }] } })).toBe(false);
+    expect(isNotFound(500, null)).toBe(false);
   });
 });

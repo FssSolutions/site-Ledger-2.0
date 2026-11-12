@@ -23,8 +23,11 @@ Differences from the plan as first written:
   instead, so rollout order does not matter.
 - The request id sent to QuickBooks is `<invoice id>-<n>`, where `n` only
   increases after QuickBooks definitely refused a request.
-- Deleting a linked invoice is allowed, with a warning that the QuickBooks
-  invoice must be voided there. Blocking it needs the void sync (phase 2).
+- Deleting a linked invoice voids it in QuickBooks first (`delete-invoice`
+  action), then deletes the SiteLedger record. If QuickBooks refuses,
+  nothing is deleted. If the invoice cannot be reached from this account
+  (disconnected, or another company connected), the app offers to delete
+  here only. Noticing a void made inside QuickBooks still needs phase 2.
 
 Still to do in phase 1: customer import, QuickBooks PDF, email via
 QuickBooks. Phase 2 (paid status, voids) is unchanged.

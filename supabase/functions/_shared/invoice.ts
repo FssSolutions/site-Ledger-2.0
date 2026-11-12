@@ -167,10 +167,10 @@ export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{1
 // PostgREST request with the CALLER's token, so RLS decides what is visible.
 // Used to read the user's own invoice, lines and customer, and to call
 // record_invoice().
-export function userDb(cfg: QboConfig, authHeader: string, path: string, init: { method?: string; body?: unknown } = {}) {
+export function userDb(cfg: QboConfig, authHeader: string, path: string, init: { method?: string; body?: unknown; prefer?: string } = {}) {
   return fetch(`${cfg.supabaseUrl}/rest/v1/${path}`, {
     method: init.method || 'GET',
-    headers: { apikey: cfg.anonKey, Authorization: authHeader, 'Content-Type': 'application/json' },
+    headers: { apikey: cfg.anonKey, Authorization: authHeader, 'Content-Type': 'application/json', ...(init.prefer ? { Prefer: init.prefer } : {}) },
     body: init.body === undefined ? undefined : JSON.stringify(init.body),
     signal: AbortSignal.timeout(20_000),
   });
@@ -308,4 +308,44 @@ export async function pushInvoice(cfg: QboConfig, conn: Connection, invoice: any
     if (ex instanceof QboError && ex.kind === 'reconnect') return await fail('QuickBooks needs to be reconnected (Company → Profile). Then tap Retry.', false);
     return await fail('QuickBooks could not be reached. Tap Retry when you have a connection.', false);
   }
+}
+
+// ---- voiding ----------------------------------------------------------------
+
+// QuickBooks answers "Object Not Found" (code 610) for an invoice that was
+// deleted there.
+export function isNotFound(status: number, data: unknown) {
+  return status === 404 || faultCodes(data).fault_code === '610';
+}
+
+export type VoidResult = { ok: true; alreadyGone: boolean } | { ok: false; error: string };
+
+// Voids an invoice in QuickBooks: it stays there, marked void with a zero
+// balance, which keeps the books' history intact. Returns ok when the
+// invoice no longer exists in QuickBooks either. Throws QboError when
+// QuickBooks cannot be reached.
+export async function voidInvoice(cfg: QboConfig, conn: Connection, qboInvoiceId: string): Promise<VoidResult> {
+  if (!validQboId(qboInvoiceId)) return { ok: false, error: 'This invoice has no valid QuickBooks id.' };
+  const refused = (r: Response) => r.status >= 400 && r.status < 500 && r.status !== 429;
+
+  // The current version marker is required to change anything in QuickBooks.
+  const got = await qboFetch(cfg, conn, `invoice/${qboInvoiceId}`);
+  const current = await got.json().catch(() => null);
+  if (!got.ok) {
+    if (isNotFound(got.status, current)) return { ok: true, alreadyGone: true };
+    if (refused(got)) return { ok: false, error: `QuickBooks could not open the invoice: ${faultMessage(current)}${referenceNote(got)}` };
+    throw new QboError('unavailable');
+  }
+  const syncToken = current?.Invoice?.SyncToken;
+  if (typeof syncToken !== 'string' || !/^\d{1,10}$/.test(syncToken)) throw new QboError('unavailable');
+
+  const r = await qboFetch(cfg, conn, 'invoice?operation=void', { method: 'POST', body: { Id: qboInvoiceId, SyncToken: syncToken } });
+  const data = await r.json().catch(() => null);
+  if (!r.ok) {
+    console.error(JSON.stringify({ source: 'quickbooks', where: 'invoice:void', status: r.status, intuit_tid: intuitTid(r), ...faultCodes(data) }));
+    if (isNotFound(r.status, data)) return { ok: true, alreadyGone: true };
+    if (refused(r)) return { ok: false, error: `QuickBooks did not void the invoice: ${faultMessage(data)}${referenceNote(r)}` };
+    throw new QboError('unavailable');
+  }
+  return { ok: true, alreadyGone: false };
 }

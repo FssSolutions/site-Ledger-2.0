@@ -145,9 +145,9 @@ try {
 
   console.log('Invoice');
   await page.getByRole('navigation', { name: 'Main' }).getByRole('button', { name: 'Reports' }).click();
-  await page.getByRole('button', { name: /Record QuickBooks Invoice/ }).click();
-  await page.getByLabel('Invoice Number (as in QuickBooks)').fill('INV-100');
-  await page.getByRole('button', { name: 'Record invoice & mark billed' }).click();
+  await page.getByRole('button', { name: 'Record an Invoice', exact: true }).click();
+  await page.getByLabel('Invoice Number').fill('INV-100');
+  await page.getByRole('button', { name: 'Record invoice & mark billed', exact: true }).click();
   await waitFor(() => mock.rows('invoices').length === 1 && mock.rows('sessions')[0].invoice_id, 'invoice recorded and session claimed atomically');
   await waitFor(() => page.getByRole('heading', { name: 'Invoice recorded' }).isVisible(), 'success shown after the server confirmed');
 

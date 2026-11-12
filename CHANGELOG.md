@@ -10,6 +10,9 @@ All notable changes to Site Ledger are documented here.
 - Connect or disconnect a QuickBooks Online company under Company → Profile. This is the first step towards creating invoices in QuickBooks from SiteLedger; connecting on its own changes nothing in QuickBooks. QuickBooks access is stored encrypted on the server and never reaches the phone.
 - Invoice setup on the same card: choose which QuickBooks item (hourly, half-day, full-day) and tax code SiteLedger will put on invoice lines. The lists come from your QuickBooks company.
 - **Create invoices in QuickBooks from SiteLedger.** With QuickBooks connected and set up, the invoice screen marks the hours billed and creates the invoice in QuickBooks in one step: one line per entry, numbered and taxed by QuickBooks. A customer who is not in QuickBooks yet is added there; one with the same name is matched. If QuickBooks cannot be reached the hours are still billed here, the invoice shows as "Not in QuickBooks yet", and Retry never creates a second invoice. Recording an invoice by hand is still available.
+- Deleting an invoice that was created in QuickBooks now also voids it in QuickBooks, so the two stay in step. If QuickBooks refuses (for example, a payment is applied), nothing is deleted.
+- QuickBooks wording ("Record QuickBooks Invoice" and similar) now only appears for accounts that have connected QuickBooks.
+- Help and support contact in Settings; privacy policy and terms of use pages.
 
 ### Data safety and account isolation
 - On-device data and pending changes are stored per account in IndexedDB; a change is only ever uploaded under the account that made it. Sign-out keeps unsynced work under its account (after asking) and removes synced cache.

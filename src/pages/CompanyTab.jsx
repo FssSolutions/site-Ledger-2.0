@@ -8,7 +8,7 @@ import { useAccentColor } from '../lib/AccentColorContext.js';
 import QuickBooksCard from '../components/QuickBooksCard.jsx';
 import { qboInvoiceState, invoiceTitle } from '../lib/qboApi.js';
 
-export default function CompanyTab({ employees, onAddEmp, onUpdateEmp, onDeleteEmp, customers, onAddCust, onUpdateCust, onDeleteCust, invoices, invoiceLines = [], sessions = [], onSetInvoiceStatus, onDeleteInvoice, onRetryQboInvoice, company, onUpdateCompany, isDesktop, ledger, uid, online, toast, initialView, taxRate }) {
+export default function CompanyTab({ employees, onAddEmp, onUpdateEmp, onDeleteEmp, customers, onAddCust, onUpdateCust, onDeleteCust, invoices, invoiceLines = [], sessions = [], onSetInvoiceStatus, onDeleteInvoice, onRetryQboInvoice, onDeleteQboInvoice, company, onUpdateCompany, isDesktop, ledger, uid, online, toast, initialView, taxRate }) {
   const accent = useAccentColor();
   const [view, setView] = useState(initialView || 'crew');
 
@@ -179,9 +179,10 @@ export default function CompanyTab({ employees, onAddEmp, onUpdateEmp, onDeleteE
             const qbo = qboInvoiceState(inv);
             const entries = `${covered.length} entr${covered.length === 1 ? 'y' : 'ies'}`;
             const deleteMsg = !covered.length ? 'Delete this invoice record? Needs internet.'
-              : qbo === 'created' ? `Delete this invoice record? Its ${entries} will go back to unbilled. The invoice stays in QuickBooks: void or delete it there too, or those hours could be billed twice. Needs internet.`
+              : qbo === 'created' ? `Delete this invoice? Its ${entries} will go back to unbilled, and the invoice will be voided in QuickBooks (it stays there, marked void, with a zero balance). Needs internet.`
+              : qbo === 'voided' ? `Delete this invoice record? Its ${entries} will go back to unbilled. It is already voided in QuickBooks. Needs internet.`
               : qbo === 'unsent' ? `Delete this invoice record? Its ${entries} will go back to unbilled. It was never created in QuickBooks. Needs internet.`
-              : `Delete this invoice record? Its ${entries} will go back to unbilled. The QuickBooks invoice is not affected. Needs internet.`;
+              : `Delete this invoice record? Its ${entries} will go back to unbilled. Any invoice you already sent is not affected. Needs internet.`;
             return (
               <div key={inv.id} style={{ ...card, padding: '14px 16px', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 12 }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -215,7 +216,7 @@ export default function CompanyTab({ employees, onAddEmp, onUpdateEmp, onDeleteE
                   style={{ padding: '6px 12px', borderRadius: 20, border: 'none', fontSize: 11, fontWeight: 700, cursor: 'pointer', background: isPaid ? '#3BB273' : '#f0f0f0', color: isPaid ? '#fff' : '#888', flexShrink: 0 }}>
                   {isPaid ? 'Paid' : 'Unpaid'}
                 </button>
-                <button type="button" aria-label="Delete invoice record" disabled={busyInvoice === inv.id} onClick={async () => { if (!window.confirm(deleteMsg)) return; setBusyInvoice(inv.id); await onDeleteInvoice(inv.id); setBusyInvoice(null); }} style={{ ...ib, color: '#c0392b', padding: 8 }}><Icon name="trash" size={14} /></button>
+                <button type="button" aria-label="Delete invoice record" disabled={busyInvoice === inv.id} onClick={async () => { if (!window.confirm(deleteMsg)) return; setBusyInvoice(inv.id); await (qbo === 'created' && onDeleteQboInvoice ? onDeleteQboInvoice : onDeleteInvoice)(inv.id); setBusyInvoice(null); }} style={{ ...ib, color: '#c0392b', padding: 8 }}><Icon name="trash" size={14} /></button>
               </div>
             );
           })}

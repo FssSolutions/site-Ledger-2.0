@@ -19,7 +19,8 @@ describe('how an invoice is shown', () => {
     expect(qboInvoiceState({ qbo_status: 'pending' })).toBe('unsent');
     expect(qboInvoiceState({ qbo_status: 'failed', qbo_error: 'x' })).toBe('unsent');
     expect(qboInvoiceState({ qbo_status: 'created', qbo_invoice_id: '145' })).toBe('created');
-    expect(qboInvoiceState({ qbo_status: 'voided', qbo_invoice_id: '145' })).toBe('created');
+    expect(qboInvoiceState({ qbo_status: 'voided', qbo_invoice_id: '145' })).toBe('voided');
+    expect(qboInvoiceState({ qbo_status: 'deleted', qbo_invoice_id: '145' })).toBe('voided');
     expect(qboInvoiceState(null)).toBe('manual');
   });
 
@@ -29,5 +30,6 @@ describe('how an invoice is shown', () => {
     expect(invoiceTitle({ qbo_status: 'failed', notes: '' })).toBe('Not in QuickBooks yet');
     expect(invoiceTitle({ qbo_status: 'created', qbo_invoice_id: '145', qbo_doc_number: '1042' })).toBe('QuickBooks #1042');
     expect(invoiceTitle({ qbo_status: 'created', qbo_invoice_id: '145', qbo_doc_number: null })).toBe('QuickBooks invoice');
+    expect(invoiceTitle({ qbo_status: 'voided', qbo_invoice_id: '145', qbo_doc_number: '1042' })).toBe('Voided in QuickBooks #1042');
   });
 });

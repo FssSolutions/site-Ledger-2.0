@@ -294,7 +294,7 @@ export default function ClockTab({ jobs, employees, sessions, company, active, o
                   {bill?.missing === 'day_type' && <div style={{ color: '#a93226', fontSize: 11 }}>pick day type</div>}
                 </div>
                 <button type="button" aria-label="Edit entry" onClick={() => setEditSess(s)} style={{ ...ib, padding: 8 }}><Icon name="edit" size={14} /></button>
-                <button type="button" aria-label="Delete entry" onClick={() => { if (window.confirm(s.invoice_id ? 'This entry is already billed. Deleting it won\'t change the recorded or QuickBooks invoice. Delete anyway?' : 'Delete this entry?')) onDelete(s.id); }} style={{ ...ib, color: '#c0392b', padding: 8 }}><Icon name="trash" size={14} /></button>
+                <button type="button" aria-label="Delete entry" onClick={() => { if (window.confirm(s.invoice_id ? 'This entry is already billed. Deleting it won\'t change the recorded invoice or any invoice already sent. Delete anyway?' : 'Delete this entry?')) onDelete(s.id); }} style={{ ...ib, color: '#c0392b', padding: 8 }}><Icon name="trash" size={14} /></button>
               </div>
             );
           })}
