@@ -12,6 +12,7 @@ const VERSION = '__VERSION__';
 const SHELL = `sl-shell-${VERSION}`;
 const FONTS = 'sl-fonts-v1';
 const PRECACHE = __PRECACHE__;
+const STANDALONE_PAGES = ['/privacy.html', '/terms.html'];
 
 self.addEventListener('install', event => {
   event.waitUntil((async () => {
@@ -45,6 +46,16 @@ self.addEventListener('fetch', event => {
     return;
   }
   if (url.origin !== self.location.origin) return; // Supabase and everything else: untouched
+
+  // Standalone pages (privacy policy, terms): serve the page itself, from the
+  // precache when offline, instead of the app shell.
+  if (req.mode === 'navigate' && STANDALONE_PAGES.includes(url.pathname)) {
+    event.respondWith((async () => {
+      const cache = await caches.open(SHELL);
+      return (await cache.match(url.pathname, { ignoreVary: true, ignoreSearch: true })) || fetch(req);
+    })());
+    return;
+  }
 
   if (req.mode === 'navigate') {
     // App shell first: opens instantly in a basement. Updates arrive through

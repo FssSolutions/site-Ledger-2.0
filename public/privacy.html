@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="theme-color" content="#E8651A" />
+<link rel="icon" type="image/svg+xml" href="/icon.svg" />
+<title>Privacy Policy · SiteLedger</title>
+<style>
+  :root { --bg: #f4f4f4; --card: #fff; --text: #222; --muted: #666; --line: #e4e4e4; --accent: #E8651A; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #161616; --card: #1f1f1f; --text: #e8e8e8; --muted: #a0a0a0; --line: #333; --accent: #f08a4b; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.65 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 32px 16px 64px; }
+  .brand { font-size: 22px; font-weight: 800; letter-spacing: -0.5px; color: var(--text); text-decoration: none; }
+  .brand span { color: var(--accent); }
+  article { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 28px 24px; margin-top: 20px; }
+  h1 { font-size: 28px; line-height: 1.2; margin: 0 0 4px; text-wrap: balance; }
+  h2 { font-size: 18px; margin: 32px 0 8px; }
+  h3 { font-size: 15px; margin: 20px 0 4px; }
+  p, li { max-width: 68ch; }
+  ul { padding-left: 22px; }
+  li { margin: 4px 0; }
+  a { color: var(--accent); }
+  .meta { color: var(--muted); font-size: 14px; margin: 0 0 20px; }
+  .table-wrap { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; margin: 8px 0; }
+  th, td { text-align: left; vertical-align: top; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 600; }
+  footer { color: var(--muted); font-size: 14px; margin-top: 20px; text-align: center; }
+</style>
+</head>
+<body>
+<main>
+  <a class="brand" href="/">Site<span>Ledger</span></a>
+  <article>
+    <h1>Privacy Policy</h1>
+    <p class="meta">Effective November 11, 2026</p>
+
+    <p>SiteLedger is a time, expense, mileage and invoicing app for contractors. It is operated by FSS Solutions, based in British Columbia, Canada ("we", "us"). This policy explains what information SiteLedger handles, why, where it is kept, and the choices you have.</p>
+    <p>Questions or requests about your information: <a href="mailto:riley@fsssolutions.ca">riley@fsssolutions.ca</a>.</p>
+
+    <h2>1. Information we handle</h2>
+    <h3>Account information</h3>
+    <ul>
+      <li>Your email address and password. Passwords are stored only in hashed form by our sign-in provider; we cannot read them.</li>
+    </ul>
+    <h3>Business records you enter</h3>
+    <ul>
+      <li>Jobs (names, addresses, rates, notes), time entries and breaks, expenses and mileage.</li>
+      <li>Crew members' names and hourly wages.</li>
+      <li>Customers' names, phone numbers, email addresses and addresses.</li>
+      <li>Your company profile: name, contact details, logo, GST number and WorkSafeBC number.</li>
+      <li>Invoices: customer, dates, line items, amounts and paid status.</li>
+    </ul>
+    <h3>Voice entries (only if you use them)</h3>
+    <ul>
+      <li>A short audio recording you make, the text transcribed from it, and the names of your active jobs and customers so the entry can be matched. We do not keep the recording or the transcript after the result is returned to you.</li>
+    </ul>
+    <h3>QuickBooks Online (only if you connect it)</h3>
+    <ul>
+      <li>Authorization tokens issued by Intuit that let SiteLedger act on your QuickBooks company. They are stored encrypted on our server and are never sent to your phone or browser.</li>
+      <li>Information read from QuickBooks: your company name and country, your products and services, your sales tax codes and rates, customers matched by name, your invoice-numbering preference and recent invoice numbers, and the number, totals and balance of invoices SiteLedger creates.</li>
+      <li>Information sent to QuickBooks when you create an invoice: the customer's name, email, phone and address (when the customer is first added there), and for each line the date, job name, worker's name, quantity and rate.</li>
+    </ul>
+    <h3>Technical information</h3>
+    <ul>
+      <li>Our hosting and database providers record standard request logs, such as IP address, browser type and time, to run and protect the service.</li>
+      <li>SiteLedger does not use advertising or analytics trackers.</li>
+    </ul>
+
+    <h2>2. How we use it</h2>
+    <ul>
+      <li>To provide the app: store and sync your records across your devices, calculate hours and totals, and produce invoices and reports.</li>
+      <li>To carry out actions you ask for, such as transcribing a voice entry or creating an invoice in QuickBooks.</li>
+      <li>To keep the service secure, prevent abuse, and fix problems.</li>
+      <li>To contact you about your account or important changes to the service.</li>
+    </ul>
+    <p>We do not sell your information, and we do not use it, or information from your QuickBooks company, for advertising or for any purpose other than providing SiteLedger to you.</p>
+
+    <h2>3. Who we share it with</h2>
+    <p>Only the service providers needed to run SiteLedger, and only what each one needs:</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Provider</th><th>What it does</th><th>What it receives</th></tr></thead>
+        <tbody>
+          <tr><td>Supabase</td><td>Database, sign-in and server functions</td><td>Your account and business records. The database is located in Canada.</td></tr>
+          <tr><td>Vercel</td><td>Delivers the app to your browser</td><td>Standard request logs. No business records.</td></tr>
+          <tr><td>OpenAI</td><td>Transcribes and interprets voice entries</td><td>The recording, and your job and customer names, only when you use voice entry. OpenAI handles them under its API terms and does not use them to train its models; we request that results not be stored.</td></tr>
+          <tr><td>Intuit (QuickBooks)</td><td>Your accounting system</td><td>The invoice and customer details listed above, only if you connect QuickBooks and create an invoice.</td></tr>
+          <tr><td>Google Fonts</td><td>Supplies the app's typefaces</td><td>Your IP address and browser type when fonts are downloaded.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Some of these providers process information outside Canada, including in the United States, where it may be accessible to authorities under local law. We may also disclose information if the law requires it.</p>
+
+    <h2>4. Information stored on your device</h2>
+    <p>So that SiteLedger works with no signal, a copy of your records and any changes waiting to sync are kept in your browser's storage on each device you sign in on. That copy is not encrypted by SiteLedger: protect it with your device's lock screen. Signing out removes synced records from the device; changes that have not synced yet are kept, after asking you, until the same account signs in again.</p>
+    <p>SiteLedger uses browser storage only to keep you signed in, hold your offline data, and remember your settings. It does not use tracking cookies.</p>
+
+    <h2>5. How we protect it</h2>
+    <ul>
+      <li>All connections use encryption in transit (HTTPS).</li>
+      <li>Database rules restrict every record to the account that owns it.</li>
+      <li>QuickBooks tokens are encrypted at rest with a key kept separately from the database.</li>
+    </ul>
+    <p>No system is perfectly secure. If a breach creates a real risk of significant harm to you, we will notify you and the relevant privacy regulators as the law requires.</p>
+
+    <h2>6. How long we keep it</h2>
+    <ul>
+      <li>Your records stay until you delete them or ask us to delete your account. Backups made by our database provider expire on their own schedule after that.</li>
+      <li>Voice recordings and transcripts are not kept after processing.</li>
+      <li>Disconnecting QuickBooks revokes SiteLedger's access at Intuit and deletes the stored tokens. Invoices already created in QuickBooks stay in your QuickBooks company.</li>
+    </ul>
+
+    <h2>7. Your choices and rights</h2>
+    <ul>
+      <li>You can view, correct and delete most records yourself in the app, and export your time and expense records as a CSV file from Reports.</li>
+      <li>You can ask us for a copy of your information, to correct it, or to delete your account and its records, by emailing <a href="mailto:riley@fsssolutions.ca">riley@fsssolutions.ca</a>. We respond within 30 days.</li>
+      <li>You can stop using voice entry or disconnect QuickBooks at any time.</li>
+      <li>If you are not satisfied with our answer, you can contact the Office of the Information and Privacy Commissioner for British Columbia or the Office of the Privacy Commissioner of Canada.</li>
+    </ul>
+
+    <h2>8. Information about other people</h2>
+    <p>You may enter information about your customers and crew. You are responsible for having the right to do so and for telling them, where the law requires it. If someone asks us about information an account holder entered about them, we will refer the request to that account holder.</p>
+
+    <h2>9. Children</h2>
+    <p>SiteLedger is a business tool and is not intended for anyone under 18.</p>
+
+    <h2>10. Changes to this policy</h2>
+    <p>If we change this policy, we will update the date above, and for significant changes we will tell you in the app or by email before they take effect.</p>
+
+    <h2>11. Contact</h2>
+    <p>FSS Solutions, British Columbia, Canada<br /><a href="mailto:riley@fsssolutions.ca">riley@fsssolutions.ca</a></p>
+  </article>
+  <footer><a href="/terms.html">Terms of Use</a> · <a href="/">Back to SiteLedger</a></footer>
+</main>
+</body>
+</html>
