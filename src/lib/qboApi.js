@@ -4,7 +4,14 @@
 import { SUPABASE_URL, accessTokenFor } from './supabaseClient.js';
 
 const TIMEOUT_MS = 20000;
-const INTUIT_SIGN_IN = 'https://appcenter.intuit.com/';
+// The sign-in address comes from Intuit's discovery document on the server;
+// the app still refuses to navigate anywhere that is not https on intuit.com.
+export function isIntuitUrl(url) {
+  try {
+    const u = new URL(url);
+    return u.protocol === 'https:' && (u.hostname === 'intuit.com' || u.hostname.endsWith('.intuit.com'));
+  } catch { return false; }
+}
 
 // Calls one of the QuickBooks Edge Functions. On failure, `code` is set when
 // the server says what to do next: 'reconnect' or 'not_connected'.
@@ -79,7 +86,7 @@ export async function startQboConnect(uid) {
   if (!r.ok) return r;
   const url = r.data?.url;
   // Only ever navigate to Intuit, whatever the server answered.
-  if (typeof url !== 'string' || !url.startsWith(INTUIT_SIGN_IN)) return { ok: false, error: 'QuickBooks sign-in could not be started. Try again.' };
+  if (typeof url !== 'string' || !isIntuitUrl(url)) return { ok: false, error: 'QuickBooks sign-in could not be started. Try again.' };
   return { ok: true, data: { url } };
 }
 

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   readConfig, b64encode, b64decode, importTokenKey, encryptToken, decryptToken, newState, hashState,
   authorizeUrl, appReturnUrl, parseTokenResponse, validRealmId, validAuthCode, validState, corsHeaders, parseOrigins,
-  needsRefresh, pickItems, pickTaxCodes, checkSettings, validQboId,
+  needsRefresh, pickItems, pickTaxCodes, checkSettings, validQboId, parseDiscovery, intuitTid,
 } from './qbo.ts';
 
 const KEY = b64encode(new Uint8Array(32).map((_, i) => i + 1));
@@ -232,5 +232,41 @@ describe('qbo invoice setup choices', () => {
     expect(validQboId("1' or '1'='1")).toBe(false);
     expect(validQboId('')).toBe(false);
     expect(validQboId(12)).toBe(false);
+  });
+});
+
+describe('Intuit discovery document', () => {
+  const doc = {
+    authorization_endpoint: 'https://appcenter.intuit.com/connect/oauth2',
+    token_endpoint: 'https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer',
+    revocation_endpoint: 'https://developer.api.intuit.com/v2/oauth2/tokens/revoke',
+  };
+
+  it('reads the OAuth addresses', () => {
+    expect(parseDiscovery(doc)).toEqual({ authorize: doc.authorization_endpoint, token: doc.token_endpoint, revoke: doc.revocation_endpoint });
+  });
+
+  it('refuses anything that is not an https Intuit address', () => {
+    expect(parseDiscovery({ ...doc, token_endpoint: 'https://evil.example/token' })).toBeNull();
+    expect(parseDiscovery({ ...doc, token_endpoint: 'https://intuit.com.evil.example/token' })).toBeNull();
+    expect(parseDiscovery({ ...doc, authorization_endpoint: 'http://appcenter.intuit.com/connect/oauth2' })).toBeNull();
+    expect(parseDiscovery({ ...doc, revocation_endpoint: undefined })).toBeNull();
+    expect(parseDiscovery(null)).toBeNull();
+    expect(parseDiscovery('nope')).toBeNull();
+  });
+
+  it('can build the sign-in URL from a discovered address', () => {
+    const u = new URL(authorizeUrl({ clientId: 'c', redirectUri: ENV.QBO_REDIRECT_URI }, 's', 'https://appcenter.intuit.com/connect/oauth2/v2'));
+    expect(u.pathname).toBe('/connect/oauth2/v2');
+    expect(u.searchParams.get('state')).toBe('s');
+  });
+});
+
+describe('Intuit request id', () => {
+  const res = (h: Record<string, string>) => new Response('', { headers: h });
+  it('is read from the intuit_tid header when well-formed', () => {
+    expect(intuitTid(res({ intuit_tid: '1-6543abcd-0f9e8d7c6b5a' }))).toBe('1-6543abcd-0f9e8d7c6b5a');
+    expect(intuitTid(res({}))).toBeNull();
+    expect(intuitTid(res({ intuit_tid: 'bad value with spaces' }))).toBeNull();
   });
 });

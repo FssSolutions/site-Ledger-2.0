@@ -8,3 +8,6 @@ export const MN = [
   "January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December",
 ];
+
+// Shown in the app and on the privacy / terms pages.
+export const SUPPORT_EMAIL = 'riley@fsssolutions.ca';

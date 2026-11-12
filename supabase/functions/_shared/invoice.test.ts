@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   escapeQueryValue, cleanDisplayName, customerPayload, lineDescription, itemIdFor, buildInvoicePayload,
-  parseInvoiceResult, faultMessage, UUID, nextDocNumber,
+  parseInvoiceResult, faultMessage, UUID, nextDocNumber, faultCodes, referenceNote,
 } from './invoice.ts';
 
 const settings = { labour_item_id: '3', half_day_item_id: null, full_day_item_id: '7', tax_code_id: '5' };
@@ -132,5 +132,20 @@ describe('invoice number when QuickBooks does not assign one', () => {
     const base = { invoiceId: 'i', txnDate: '2026-11-11', customerRef: '1', lines: [], settings: { labour_item_id: '3', half_day_item_id: null, full_day_item_id: null, tax_code_id: '5' } };
     expect(buildInvoicePayload({ ...base, docNumber: '1003' }).DocNumber).toBe('1003');
     expect(buildInvoicePayload({ ...base, docNumber: null })).not.toHaveProperty('DocNumber');
+  });
+});
+
+describe('troubleshooting details', () => {
+  it('logs only QuickBooks codes, never free text', () => {
+    const fault = { Fault: { type: 'ValidationFault', Error: [{ code: '6240', Message: 'Duplicate Name Exists Error', Detail: 'The name Jane Smith already exists.' }] } };
+    expect(faultCodes(fault)).toEqual({ fault_type: 'ValidationFault', fault_code: '6240' });
+    expect(JSON.stringify(faultCodes(fault))).not.toContain('Jane');
+    expect(faultCodes({ Fault: { type: 'x y; drop', Error: [{ code: 'has spaces' }] } })).toEqual({ fault_type: null, fault_code: null });
+    expect(faultCodes(null)).toEqual({ fault_type: null, fault_code: null });
+  });
+
+  it('adds Intuit\'s request id to the message shown to the user', () => {
+    expect(referenceNote(new Response('', { headers: { intuit_tid: '1-abc123' } }))).toBe(' (QuickBooks reference 1-abc123)');
+    expect(referenceNote(new Response(''))).toBe('');
   });
 });

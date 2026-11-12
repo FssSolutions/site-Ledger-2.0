@@ -10,7 +10,7 @@
 // QuickBooks invoice. The counter in the request id only moves on when
 // QuickBooks definitely refused a request, so a corrected retry is sent as
 // a new request.
-import { type QboConfig, type Connection, type QboSettings, QboError, qboFetch, qboQuery, db, validQboId } from './qbo.ts';
+import { type QboConfig, type Connection, type QboSettings, QboError, qboFetch, qboQuery, db, validQboId, intuitTid } from './qbo.ts';
 
 // ---- pure helpers (unit-tested) ---------------------------------------------
 
@@ -148,6 +148,18 @@ export function faultMessage(data: unknown) {
   return text(e?.Detail ?? e?.detail, 240) || text(e?.Message ?? e?.message, 240) || 'no reason was given';
 }
 
+// QuickBooks' error code and fault type, for the server log (no free text).
+export function faultCodes(data: unknown) {
+  // deno-lint-ignore no-explicit-any
+  const f = (data as any)?.Fault ?? (data as any)?.fault;
+  const e = f?.Error?.[0] ?? f?.error?.[0];
+  const safe = (v: unknown) => (typeof v === 'string' && /^[\w.-]{1,40}$/.test(v) ? v : null);
+  return { fault_type: safe(f?.type), fault_code: safe(e?.code) };
+}
+
+// " (QuickBooks reference 1-abc...)" so the user can quote it to support.
+export const referenceNote = (r: Response) => (intuitTid(r) ? ` (QuickBooks reference ${intuitTid(r)})` : '');
+
 export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // ---- database as the user ---------------------------------------------------
@@ -185,7 +197,8 @@ async function ensureCustomer(cfg: QboConfig, conn: Connection, customer: Custom
     const r = await qboFetch(cfg, conn, 'customer', { method: 'POST', body: customerPayload(customer) });
     const data = await r.json().catch(() => null);
     if (!r.ok) {
-      if (r.status >= 400 && r.status < 500 && r.status !== 429) throw new PushError(`QuickBooks could not add the customer "${name}": ${faultMessage(data)}`);
+      console.error(JSON.stringify({ source: 'quickbooks', where: 'customer:create', status: r.status, intuit_tid: intuitTid(r), ...faultCodes(data) }));
+      if (r.status >= 400 && r.status < 500 && r.status !== 429) throw new PushError(`QuickBooks could not add the customer "${name}": ${faultMessage(data)}${referenceNote(r)}`);
       throw new QboError('unavailable');
     }
     id = data?.Customer?.Id;
@@ -264,13 +277,14 @@ export async function pushInvoice(cfg: QboConfig, conn: Connection, invoice: any
     const r = await qboFetch(cfg, conn, `invoice?requestid=${row.id}-${Number(row.qbo_attempt) || 0}`, { method: 'POST', body: payload });
     const data = await r.json().catch(() => null);
     if (!r.ok) {
+      console.error(JSON.stringify({ source: 'quickbooks', where: 'invoice:create', status: r.status, intuit_tid: intuitTid(r), ...faultCodes(data) }));
       if (r.status >= 400 && r.status < 500 && r.status !== 429) {
         // A stored customer link may point at a customer that was deleted or
         // merged in QuickBooks; forget it so the retry looks the customer up again.
         if (cust.fromLink) await db(cfg, `qbo_customer_links?customer_id=eq.${customer.id}&realm_id=eq.${conn.realmId}`, { method: 'DELETE' }).then(x => x.body?.cancel()).catch(() => null);
-        return await fail(`QuickBooks did not accept the invoice: ${faultMessage(data)}`, true);
+        return await fail(`QuickBooks did not accept the invoice: ${faultMessage(data)}${referenceNote(r)}`, true);
       }
-      return await fail('QuickBooks is having trouble right now. Tap Retry in a few minutes.', false);
+      return await fail(`QuickBooks is having trouble right now. Tap Retry in a few minutes.${referenceNote(r)}`, false);
     }
     const res = parseInvoiceResult(data);
     if (!res) return await fail('QuickBooks answered in an unexpected way. Tap Retry; it will not create a second invoice.', false);

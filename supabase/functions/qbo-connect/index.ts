@@ -9,7 +9,7 @@
 // function, not here.
 import {
   readConfig, corsHeaders, parseOrigins, getUserId, db, newState, hashState, authorizeUrl,
-  importTokenKey, decryptToken, revokeToken, STATE_TTL_MS,
+  importTokenKey, decryptToken, revokeToken, oauthEndpoints, STATE_TTL_MS,
 } from '../_shared/qbo.ts';
 
 const ALLOWED_ORIGINS = parseOrigins(Deno.env.get('ALLOWED_ORIGINS'));
@@ -54,7 +54,7 @@ Deno.serve(async req => {
         body: { state_hash: await hashState(state), user_id: uid, expires_at: new Date(Date.now() + STATE_TTL_MS).toISOString() },
       });
       if (!saved.ok) return json(req, { error: 'QuickBooks is temporarily unavailable. Try again.' }, 503);
-      return json(req, { url: authorizeUrl(cfg, state) });
+      return json(req, { url: authorizeUrl(cfg, state, (await oauthEndpoints(cfg)).authorize) });
     }
 
     // disconnect

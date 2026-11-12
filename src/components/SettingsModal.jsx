@@ -1,6 +1,7 @@
 import { useId } from 'react';
 import { Modal, ModalHeader } from './Modal.jsx';
 import { inp, lbl } from '../styles.js';
+import { SUPPORT_EMAIL } from '../lib/constants.js';
 
 const PRESETS = [
   '#E8651A', '#3B82F6', '#10B981', '#8B5CF6',
@@ -97,6 +98,16 @@ export default function SettingsModal({ prefs, onClose }) {
         </label>
         <div style={{ color: '#666', fontSize: 12, marginTop: 6 }}>
           Per worker, BC rules: over 8 h a day (double over 12 h), over 40 h in a Sunday–Saturday week not already counted daily. These are reminders, not payroll calculations.
+        </div>
+      </div>
+
+      <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid #eee' }}>
+        <div style={{ color: '#111', fontSize: 14, fontWeight: 600, marginBottom: 4 }}>Help and support</div>
+        <div style={{ color: '#666', fontSize: 13, lineHeight: 1.6 }}>
+          Questions or a problem? Email <a href={`mailto:${SUPPORT_EMAIL}?subject=SiteLedger%20support`} style={{ color: accentColor || '#E8651A', fontWeight: 600 }}>{SUPPORT_EMAIL}</a>.
+        </div>
+        <div style={{ fontSize: 12, marginTop: 6 }}>
+          <a href="/privacy.html" target="_blank" rel="noopener" style={{ color: '#777' }}>Privacy Policy</a>{' · '}<a href="/terms.html" target="_blank" rel="noopener" style={{ color: '#777' }}>Terms of Use</a>
         </div>
       </div>
 
