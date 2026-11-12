@@ -181,7 +181,7 @@ export default function CompanyTab({ employees, onAddEmp, onUpdateEmp, onDeleteE
             const deleteMsg = !covered.length ? 'Delete this invoice record? Needs internet.'
               : qbo === 'created' ? `Delete this invoice record? Its ${entries} will go back to unbilled. The invoice stays in QuickBooks: void or delete it there too, or those hours could be billed twice. Needs internet.`
               : qbo === 'unsent' ? `Delete this invoice record? Its ${entries} will go back to unbilled. It was never created in QuickBooks. Needs internet.`
-              : `Delete this invoice record? Its ${entries} will go back to unbilled. The QuickBooks invoice is not affected. Needs internet.`;
+              : `Delete this invoice record? Its ${entries} will go back to unbilled. Any invoice you already sent is not affected. Needs internet.`;
             return (
               <div key={inv.id} style={{ ...card, padding: '14px 16px', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 12 }}>
                 <div style={{ flex: 1, minWidth: 0 }}>

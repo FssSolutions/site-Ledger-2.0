@@ -8,6 +8,7 @@ import { overtimeForRange } from '../lib/overtime.js';
 import { mileageEstimates } from '../lib/mileage.js';
 import { toCsv, downloadText } from '../lib/csv.js';
 import { useAccentColor } from '../lib/AccentColorContext.js';
+import { useQboMode } from '../hooks/useQboMode.js';
 
 const InvoiceModal = lazy(() => import('../components/InvoiceModal.jsx'));
 
@@ -21,6 +22,8 @@ const Stat = ({ label, value, color = '#111', hint }) => (
 
 export default function ReportsTab({ jobs, employees, sessions, openSessions = [], mileage, expenses, company, customers, taxRate, otRules, isDesktop, ledger, toast }) {
   const accent = useAccentColor();
+  // Only accounts that use QuickBooks see QuickBooks wording.
+  const qboMode = useQboMode(ledger);
   const [pre, setPre] = useState('month');
   const [cs, setCs] = useState('');
   const [ce, setCe] = useState('');
@@ -186,7 +189,7 @@ export default function ReportsTab({ jobs, employees, sessions, openSessions = [
       <div style={{ padding: '16px 16px 0', display: 'flex', flexDirection: 'column', gap: 8 }}>
         <button type="button" onClick={() => setShowInvoice(true)}
           style={{ width: '100%', padding: '14px', borderRadius: 12, border: 'none', background: accent, color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontFamily: "'Syne', sans-serif" }}>
-          <Icon name="invoice" size={16} /> Record QuickBooks Invoice &amp; Mark Billed
+          <Icon name="invoice" size={16} /> {qboMode === 'ready' ? 'Create QuickBooks Invoice & Mark Billed' : 'Record Invoice & Mark Billed'}
         </button>
         {f.length > 0 && (
           <button type="button" onClick={exportCSV} style={{ width: '100%', padding: '12px', borderRadius: 12, border: '1px solid #ddd', background: '#fff', color: '#555', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>

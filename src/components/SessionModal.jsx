@@ -85,7 +85,7 @@ export default function SessionModal({ session, initialSession, voiceMeta, date,
       <form onSubmit={save} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
         {session?.invoice_id && (
           <div style={{ border: '1px solid #D6EAF8', borderRadius: 12, background: '#EBF5FB', padding: '10px 14px', color: '#1B6C8F', fontSize: 12 }}>
-            This entry is already billed. Changes here do not change the recorded invoice or the QuickBooks invoice.
+            This entry is already billed. Changes here do not change the recorded invoice, or any invoice already sent.
           </div>
         )}
         {voiceMeta && (

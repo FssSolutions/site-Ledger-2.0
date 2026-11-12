@@ -7,6 +7,7 @@ import { buildInvoiceLines, totalsFromLines, toRpcLine, fmtCAD, toCents, duplica
 import { localDateKey, todayKey, addDaysKey, sessionInRange } from '../lib/time.js';
 import { newId } from '../lib/ledgerStore.js';
 import { qboInvoiceMode } from '../lib/qboApi.js';
+import { usesQuickBooks } from '../hooks/useQboMode.js';
 
 function nextInvoiceNumber() {
   try {
@@ -44,6 +45,8 @@ export default function InvoiceModal({ sessions, jobs, employees, customers, dat
     return () => { alive = false; };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const useQbo = qbo === 'ready' && !byHand;
+  // Accounts that have not connected QuickBooks see no QuickBooks wording.
+  const qbWords = usesQuickBooks(qbo);
 
   const validKey = k => (typeof k === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(k) ? k : null);
   const [startStr, setStartStr] = useState(() => validKey(voiceRequest?.date_range_start) || (Array.isArray(dateRange) && validKey(dateRange[0]) && dateRange[0] !== '0000-01-01' ? dateRange[0] : addDaysKey(todayKey(), -30)));
@@ -183,7 +186,7 @@ export default function InvoiceModal({ sessions, jobs, employees, customers, dat
   return (
     <Modal onClose={onClose}>
       <ModalHeader title={useQbo ? 'Create invoice in QuickBooks' : 'Record invoice'}
-        subtitle={useQbo ? 'Marks these hours as billed and creates the invoice in your QuickBooks company' : 'After you create the invoice in QuickBooks, record it here to mark those hours as billed'} onClose={onClose} />
+        subtitle={useQbo ? 'Marks these hours as billed and creates the invoice in your QuickBooks company' : qbWords ? 'After you create the invoice in QuickBooks, record it here to mark those hours as billed' : 'Marks these hours as billed, so they are not billed twice. You can download a PDF invoice once it is recorded.'} onClose={onClose} />
 
       {(qbo === 'setup' || qbo === 'reconnect') && (
         <div style={note('#EBF5FB', '#1B6C8F')}>
@@ -259,7 +262,7 @@ export default function InvoiceModal({ sessions, jobs, employees, customers, dat
 
       {!useQbo && (
         <div style={{ marginBottom: 16 }}>
-          <label htmlFor={`${id}-num`} style={lbl}>Invoice Number (as in QuickBooks)</label>
+          <label htmlFor={`${id}-num`} style={lbl}>{qbWords ? 'Invoice Number (as in QuickBooks)' : 'Invoice Number'}</label>
           <input id={`${id}-num`} style={inp} value={invoiceNum} onChange={e => setInvoiceNum(e.target.value)} />
         </div>
       )}
@@ -275,14 +278,14 @@ export default function InvoiceModal({ sessions, jobs, employees, customers, dat
 
       {lines.length > 0 && !useQbo && (
         <div style={{ marginBottom: 16 }}>
-          <label htmlFor={`${id}-amt`} style={lbl}>Amount on the QuickBooks invoice (CAD, incl. tax)</label>
+          <label htmlFor={`${id}-amt`} style={lbl}>{qbWords ? 'Amount on the QuickBooks invoice (CAD, incl. tax)' : 'Invoice amount (CAD, incl. tax)'}</label>
           <input id={`${id}-amt`} style={inp} type="number" inputMode="decimal" min="0" step="0.01"
             value={amountStr === '' ? (totals.totalCents / 100).toFixed(2) : amountStr}
             onChange={e => { setAmountStr(e.target.value); setRequestId(newId()); }} />
           <div style={{ color: '#666', fontSize: 12, marginTop: 6 }}>
             {overridden
-              ? <>Differs from the calculated {fmtCAD(totals.totalCents)} (e.g. materials added in QuickBooks). Both are recorded. A PDF from this app would not match, so use the QuickBooks PDF. <button type="button" onClick={() => setAmountStr('')} style={{ color: accent, background: 'none', border: 'none', fontWeight: 600, cursor: 'pointer' }}>Reset</button></>
-              : 'Change this only if the QuickBooks total is different.'}
+              ? <>Differs from the calculated {fmtCAD(totals.totalCents)} ({qbWords ? 'e.g. materials added in QuickBooks' : 'e.g. materials added'}). Both are recorded. {qbWords ? 'A PDF from this app would not match, so use the QuickBooks PDF.' : 'A PDF from this app would not match, so it is not offered.'} <button type="button" onClick={() => setAmountStr('')} style={{ color: accent, background: 'none', border: 'none', fontWeight: 600, cursor: 'pointer' }}>Reset</button></>
+              : qbWords ? 'Change this only if the QuickBooks total is different.' : 'Change this only if the invoice total is different.'}
           </div>
         </div>
       )}
@@ -300,7 +303,7 @@ export default function InvoiceModal({ sessions, jobs, employees, customers, dat
         style={{ width: '100%', padding: '14px', borderRadius: 12, border: 'none', background: canSubmit ? accent : '#e0e0e0', color: canSubmit ? '#fff' : '#777', fontSize: 15, fontWeight: 700, cursor: canSubmit ? 'pointer' : 'not-allowed', fontFamily: "'Syne', sans-serif" }}>
         {useQbo ? (saving ? 'Creating in QuickBooks…' : 'Create in QuickBooks & mark billed') : (saving ? 'Recording…' : 'Record invoice & mark billed')}
       </button>
-      <div style={{ color: '#777', fontSize: 11, marginTop: 8, textAlign: 'center' }}>{useQbo ? 'Needs internet. Creates a real invoice in your QuickBooks company.' : 'Needs internet. Nothing is sent to QuickBooks.'}</div>
+      <div style={{ color: '#777', fontSize: 11, marginTop: 8, textAlign: 'center' }}>{useQbo ? 'Needs internet. Creates a real invoice in your QuickBooks company.' : qbWords ? 'Needs internet. Nothing is sent to QuickBooks.' : 'Needs internet.'}</div>
       {qbo === 'ready' && !saving && (
         <div style={{ textAlign: 'center', marginTop: 10 }}>
           <button type="button" onClick={() => { setByHand(v => !v); setError(''); setRequestId(newId()); }} style={{ color: accent, background: 'none', border: 'none', fontWeight: 600, cursor: 'pointer', fontSize: 12 }}>
